@@ -113,16 +113,16 @@ export default function FocusPage() {
     }
     if (segs.length === 0) return;
 
-    // 가감속 속도 (위치 기반으로 현실적으로)
+    // 가감속 속도 (위치 기반)
     function calcSpeed(seg: any, segP: number): number {
       const D = seg.toDist - seg.fromDist;
       const T = seg.segTime;
       if (T <= 0 || segP <= 0) return 0;
       if (segP >= 1) return 0;
-      // 최고속도 = 거리/시간 * 2 (가감속 평균의 2배)
-      const avgSpeedMs = D / T; // 평균 속도 m/s
-      const maxV = Math.min(85, avgSpeedMs * 2);
-      // 정현파 가감속: segP=0.5에서 최고
+      const avgSpeedMs = D / T;
+      // KTX max 305km/h(85m/s), 무궁화 max 150km/h(42m/s)
+      const maxSpeedMs = train.type === 'KTX' ? 85 : 42;
+      const maxV = Math.min(maxSpeedMs, avgSpeedMs * 2);
       const speed = maxV * Math.sin(Math.PI * segP);
       return Math.round(speed * 3.6);
     }
