@@ -35,6 +35,15 @@ function posAtTime(p: any, elapsed: number) {
   return p.accelDist + p.cruiseDist + p.v * t2 - 0.5 * p.a * t2 * t2;
 }
 
+function speedKmhAtTime(p: any, elapsed: number): number {
+  if (elapsed <= 0 || elapsed >= p.totalTime) return 0;
+  if (elapsed < p.accelTime) return p.a * elapsed * 3.6;
+  const t1 = elapsed - p.accelTime;
+  if (t1 < p.cruiseTime) return p.v * 3.6;
+  const t2 = t1 - p.cruiseTime;
+  return Math.max(0, (p.v - p.a * t2)) * 3.6;
+}
+
 export default function FocusPage() {
   const params = typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search) : new URLSearchParams();
@@ -47,7 +56,7 @@ export default function FocusPage() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const playingRef = useRef(false);
-  const speedRef = useRef(5);
+  const speedRef = useRef(1);
   const animRef = useRef(0);
   const [trainData, setTrainData] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
@@ -57,8 +66,9 @@ export default function FocusPage() {
   const [arrivalTime, setArrivalTime] = useState('');
   const [elapsedSec, setElapsedSec] = useState(0);
   const [totalSec, setTotalSec] = useState(0);
-  const [speedDisplay, setSpeedDisplay] = useState(5);
+  const [speedDisplay, setSpeedDisplay] = useState(1);
   const [error, setError] = useState('');
+  const [currentSpeed, setCurrentSpeed] = useState(0);
 
   useEffect(() => {
     fetch('/data/gyeongbu-corridor.json')
@@ -191,6 +201,9 @@ export default function FocusPage() {
         markerRef.current.setLngLat(pt.geometry.coordinates as [number, number]);
         mapRef.current?.panTo(pt.geometry.coordinates as [number, number], { duration: 200, animate: true });
 
+        const spd = speedKmhAtTime(curSeg.profile, Math.max(0, Math.min(segElapsed, curSeg.profile.totalTime)));
+        setCurrentSpeed(Math.round(spd));
+
         setProgress(Math.min(1, simElapsed / totalSimTime));
         setElapsedSec(Math.min(totalSec, simElapsed));
 
@@ -212,7 +225,7 @@ export default function FocusPage() {
 
   const handleReset = () => {
     playingRef.current = false; setPlaying(false); cancelAnimationFrame(animRef.current);
-    setProgress(0); setElapsedSec(0); setCurrentSt(fromName); setNextSt('');
+    setProgress(0); setElapsedSec(0); setCurrentSt(fromName); setNextSt(''); setCurrentSpeed(0);
     if (markerRef.current && trainData) {
       const c = trainData.corridor.geometry.coordinates;
       markerRef.current.setLngLat([c[0][0], c[0][1]]);
@@ -248,11 +261,12 @@ export default function FocusPage() {
                 <div style={{height:'100%',background:'#3b82f6',borderRadius:'999px',transition:'width 300ms',width:`${progress*100}%`}} />
               </div>
 
-              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'8px',textAlign:'center',marginBottom:'12px'}}>
-                <div><div style={{fontSize:'10px',color:'#6b7280'}}>현재역</div><div style={{fontSize:'14px',fontWeight:'700',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{currentSt}</div></div>
-                <div><div style={{fontSize:'10px',color:'#6b7280'}}>다음역</div><div style={{fontSize:'14px',fontWeight:'700',color:'#2563eb',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nextSt || '도착'}</div></div>
-                <div><div style={{fontSize:'10px',color:'#6b7280'}}>경과</div><div style={{fontSize:'14px',fontWeight:'700'}}>{elapsedSec>0 ? `${Math.floor(elapsedSec/60)}분 ${Math.floor(elapsedSec%60)}초` : '0분'}</div></div>
-                <div><div style={{fontSize:'10px',color:'#6b7280'}}>도착</div><div style={{fontSize:'14px',fontWeight:'700'}}>{arrivalTime||'-'}</div></div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'4px',textAlign:'center',marginBottom:'12px'}}>
+                <div><div style={{fontSize:'10px',color:'#6b7280'}}>현재역</div><div style={{fontSize:'13px',fontWeight:'700',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{currentSt}</div></div>
+                <div><div style={{fontSize:'10px',color:'#6b7280'}}>다음역</div><div style={{fontSize:'13px',fontWeight:'700',color:'#2563eb',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nextSt||'도착'}</div></div>
+                <div><div style={{fontSize:'10px',color:'#6b7280'}}>경과</div><div style={{fontSize:'13px',fontWeight:'700'}}>{elapsedSec>0?Math.floor(elapsedSec/60)+'분':''}</div></div>
+                <div><div style={{fontSize:'10px',color:'#6b7280'}}>속도</div><div style={{fontSize:'13px',fontWeight:'700',color:'#059669'}}>{currentSpeed}km/h</div></div>
+                <div><div style={{fontSize:'10px',color:'#6b7280'}}>도착</div><div style={{fontSize:'13px',fontWeight:'700'}}>{arrivalTime||'-'}</div></div>
               </div>
 
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
