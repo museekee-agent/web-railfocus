@@ -6,45 +6,28 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import * as turf from '@turf/turf';
 
 function computeProfile(D: number, T: number, maxV: number, accel: number) {
-  let lo = 1, hi = maxV;
-  for (let iter = 0; iter < 50; iter++) {
-    const v = (lo + hi) / 2;
-    const aTime = v / accel, aDist = v * v / (2 * accel), cDist = D - 2 * aDist;
-    if (cDist < 0) { hi = v; continue; }
-    if (2 * aTime + cDist / v > T) hi = v; else lo = v;
+  // T=0이면 정차 구간
+  if (T <= 0.1) return { accelDist: 0, cruiseDist: 0, decelDist: 0, accelTime: 0, cruiseTime: 0, decelTime: 0, v: 0, a: accel, totalDist: D, totalTime: T };
+  
+  // 최대 가속/감속 시간 = T/2 (절반 가속, 절반 감속)
+  const maxPossibleV = accel * T / 2;
+  const v = Math.min(maxV, maxPossibleV);
+  const aTime = v / accel;
+  const aDist = v * v / (2 * accel);
+  const totalAccelDist = 2 * aDist;
+  
+  if (totalAccelDist >= D) {
+    // 삼각형: D가 가속/감속 거리보다 짧음
+    const v2 = Math.sqrt(accel * D);
+    const aTime2 = v2 / accel;
+    const totalTime2 = 2 * aTime2;
+    return { accelDist: D / 2, cruiseDist: 0, decelDist: D / 2, accelTime: aTime2, cruiseTime: 0, decelTime: aTime2, v: v2, a: accel, totalDist: D, totalTime: Math.max(totalTime2, T) };
   }
-  let v = (lo + hi) / 2;
-  if (v > maxV) v = maxV;
-  let aTime = v / accel, aDist = v * v / (2 * accel), cDist = D - 2 * aDist;
-  if (cDist < 0) {
-    v = Math.sqrt(accel * D);
-    if (v > maxV) v = maxV;
-    aTime = v / accel; aDist = v * v / (2 * accel);
-    let totalT = 2 * aTime;
-    // T보다 크면 속도를 더 높여서 T에 맞춤 (도착시각 정확도 우선)
-    if (totalT > T) {
-      v = Math.min(maxV, accel * T / 2 + Math.sqrt(accel * D + accel * accel * T * T / 4) / 2);
-      aTime = v / accel; aDist = v * v / (2 * accel);
-      totalT = 2 * aTime;
-    }
-    return { accelDist: aDist, cruiseDist: 0, decelDist: aDist, accelTime: aTime, cruiseTime: 0, decelTime: aTime, v, a: accel, totalDist: D, totalTime: Math.max(totalT, T) };
-  }
-  const cruiseTime = cDist / v;
-  let totalT = 2 * aTime + cruiseTime;
-  // T보다 크면 cruise 없이 삼각형으로 전환 후 위 로직 반복
-  if (totalT > T) {
-    v = Math.sqrt(accel * D);
-    if (v > maxV) v = maxV;
-    aTime = v / accel; aDist = v * v / (2 * accel);
-    totalT = 2 * aTime;
-    if (totalT > T) {
-      v = Math.min(maxV, accel * T / 2 + Math.sqrt(accel * D + accel * accel * T * T / 4));
-      aTime = v / accel; aDist = v * v / (2 * accel);
-      totalT = 2 * aTime;
-    }
-    return { accelDist: aDist, cruiseDist: 0, decelDist: aDist, accelTime: aTime, cruiseTime: 0, decelTime: aTime, v, a: accel, totalDist: D, totalTime: Math.max(totalT, T) };
-  }
-  return { accelDist: aDist, cruiseDist: cDist, decelDist: aDist, accelTime: aTime, cruiseTime, decelTime: aTime, v, a: accel, totalDist: D, totalTime: totalT };
+  
+  // 사다리꼴: cruise 구간으로 T를 정확히 맞춤
+  const cruiseDist = D - totalAccelDist;
+  const cruiseTime = Math.max(0, T - 2 * aTime);
+  return { accelDist: aDist, cruiseDist, decelDist: aDist, accelTime: aTime, cruiseTime, decelTime: aTime, v, a: accel, totalDist: D, totalTime: T };
 }
 
 function posAtTime(p: any, elapsed: number) {
