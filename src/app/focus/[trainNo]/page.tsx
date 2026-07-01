@@ -5,54 +5,8 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import * as turf from '@turf/turf';
 
-function computeProfile(D: number, T: number, maxV: number, accel: number) {
-  // T=0이면 정차 구간
-  if (T <= 0.1) return { accelDist: 0, cruiseDist: 0, decelDist: 0, accelTime: 0, cruiseTime: 0, decelTime: 0, v: 0, a: accel, totalDist: D, totalTime: T };
-  
-  // 최대 가속/감속 시간 = T/2 (절반 가속, 절반 감속)
-  const maxPossibleV = accel * T / 2;
-  const v = Math.min(maxV, maxPossibleV);
-  const aTime = v / accel;
-  const aDist = v * v / (2 * accel);
-  const totalAccelDist = 2 * aDist;
-  
-  if (totalAccelDist >= D) {
-    // 삼각형: D가 가속/감속 거리보다 짧음
-    const v2 = Math.sqrt(accel * D);
-    const aTime2 = v2 / accel;
-    const totalTime2 = 2 * aTime2;
-    return { accelDist: D / 2, cruiseDist: 0, decelDist: D / 2, accelTime: aTime2, cruiseTime: 0, decelTime: aTime2, v: v2, a: accel, totalDist: D, totalTime: totalTime2 };
-  }
-  
-  // 사다리꼴: cruise 구간으로 T를 정확히 맞춤
-  const cruiseDist = D - totalAccelDist;
-  const cruiseTime = Math.max(0, T - 2 * aTime);
-  return { accelDist: aDist, cruiseDist, decelDist: aDist, accelTime: aTime, cruiseTime, decelTime: aTime, v, a: accel, totalDist: D, totalTime: T };
-}
-
-function posAtTime(p: any, elapsed: number) {
-  if (elapsed <= 0) return 0;
-  if (elapsed >= p.totalTime) return p.totalDist;
-  if (elapsed < p.accelTime) return Math.min(0.5 * p.a * elapsed * elapsed, p.totalDist);
-  const t1 = elapsed - p.accelTime;
-  if (t1 < p.cruiseTime) return Math.min(p.accelDist + p.v * t1, p.totalDist);
-  const t2 = t1 - p.cruiseTime;
-  const d = p.accelDist + p.cruiseDist + p.v * t2 - 0.5 * p.a * t2 * t2;
-  return Math.min(Math.max(d, 0), p.totalDist);
-}
-
-function speedKmhAtTime(p: any, elapsed: number): number {
-  if (elapsed <= 0 || elapsed >= p.totalTime) return 0;
-  if (elapsed < p.accelTime) return p.a * elapsed * 3.6;
-  const t1 = elapsed - p.accelTime;
-  if (t1 < p.cruiseTime) return p.v * 3.6;
-  const t2 = t1 - p.cruiseTime;
-  return Math.max(0, (p.v - p.a * t2)) * 3.6;
-}
-
 export default function FocusPage() {
-  const params = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const pathParts = typeof window !== 'undefined' ? window.location.pathname.split('/') : [];
   const trainNo = pathParts[pathParts.length - 1] || 'KTX001';
   const fromName = params.get('from') || '서울';
@@ -63,8 +17,10 @@ export default function FocusPage() {
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const playingRef = useRef(false);
   const speedRef = useRef(1);
+  const progressRef = useRef(0);
   const animRef = useRef(0);
-  const [trainData, setTrainData] = useState<any>(null);
+  const [data, setData] = useState<any>(null);
+  const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentSt, setCurrentSt] = useState(fromName);
@@ -72,225 +28,229 @@ export default function FocusPage() {
   const [arrivalTime, setArrivalTime] = useState('');
   const [elapsedSec, setElapsedSec] = useState(0);
   const [totalSec, setTotalSec] = useState(0);
-  const [speedDisplay, setSpeedDisplay] = useState(1);
+  const [speedDisp, setSpeedDisp] = useState(1);
+  const [curSpeed, setCurSpeed] = useState(0);
   const [error, setError] = useState('');
-  const [currentSpeed, setCurrentSpeed] = useState(0);
 
+  // 데이터 로드
   useEffect(() => {
-    fetch('/data/gyeongbu-corridor.json')
-      .then(r => r.json())
-      .then(d => {
-        const train = d.train_runs.find((t: any) => t.train_no === trainNo);
-        if (!train) { setError('열차를 찾을 수 없음'); return; }
-        setTrainData({ ...d, train });
-        const dep = train.stops.find((s: any) => s.station === fromName);
-        const arr = train.stops.find((s: any) => s.station === toName);
-        if (dep?.departure && arr?.arrival) {
-          const [h1, m1] = dep.departure.split(':').map(Number);
-          const [h2, m2] = arr.arrival.split(':').map(Number);
-          setTotalSec((h2 * 60 + m2) - (h1 * 60 + m1));
-          setArrivalTime(arr.arrival);
-        }
-      })
-      .catch((e: any) => setError('데이터 로드 실패: ' + e.message));
+    fetch('/data/gyeongbu-corridor.json').then(r => r.json()).then(d => {
+      const train = d.train_runs.find((t: any) => t.train_no === trainNo);
+      if (!train) { setError('열차 없음'); return; }
+      setData({ ...d, train });
+      const dep = train.stops.find((s: any) => s.station === fromName);
+      const arr = train.stops.find((s: any) => s.station === toName);
+      if (dep?.departure && arr?.arrival) {
+        const [h1, m1] = dep.departure.split(':').map(Number);
+        const [h2, m2] = arr.arrival.split(':').map(Number);
+        setTotalSec((h2 * 60 + m2) - (h1 * 60 + m1));
+        setArrivalTime(arr.arrival);
+      }
+    }).catch((e: any) => setError('데이터 로드 실패'));
   }, [trainNo, fromName, toName]);
 
+  // Map 초기화
   useEffect(() => {
-    if (!trainData || !containerRef.current || mapRef.current) return;
+    if (!data || !containerRef.current || mapRef.current) return;
     try {
-      const { corridor, train } = trainData;
-      const coords = corridor.geometry.coordinates;
-      const isEndpoint = (s: string) => s === fromName || s === toName;
-
+      const coords = data.corridor.geometry.coordinates;
       const map = new maplibregl.Map({
         container: containerRef.current,
         style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-        center: [128.0, 36.3],
-        zoom: 7,
-        attributionControl: false,
+        center: [128.0, 36.3], zoom: 8, attributionControl: false,
       });
-
+      map.addControl(new maplibregl.FullscreenControl({ container: document.body }), 'top-right');
       map.on('load', () => {
         map.addSource('corridor', {
           type: 'geojson',
           data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} }
         });
-        map.addLayer({
-          id: 'corridor-line', type: 'line', source: 'corridor',
-          paint: { 'line-color': '#93c5fd', 'line-width': 3 }
-        });
+        map.addLayer({ id: 'corridor-line', type: 'line', source: 'corridor', paint: { 'line-color': '#93c5fd', 'line-width': 3 } });
 
-        corridor.stations.forEach((s: any) => {
+        data.corridor.stations.forEach((s: any) => {
           const el = document.createElement('div');
-          el.style.width = isEndpoint(s.name) ? '12px' : '6px';
-          el.style.height = isEndpoint(s.name) ? '12px' : '6px';
-          el.style.borderRadius = '50%';
-          el.style.backgroundColor = isEndpoint(s.name) ? '#3b82f6' : '#9ca3af';
-          el.style.border = '2px solid white';
+          el.style.cssText = `width:${s.name===fromName||s.name===toName?'12':'6'}px;height:${s.name===fromName||s.name===toName?'12':'6'}px;border-radius:50%;background:${s.name===fromName||s.name===toName?'#3b82f6':'#9ca3af'};border:2px solid white`;
           new maplibregl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(map);
         });
 
         const md = document.createElement('div');
-        md.style.width = '22px';
-        md.style.height = '22px';
-        md.style.borderRadius = '50%';
-        md.style.backgroundColor = train.color || '#4f46e5';
-        md.style.border = '3px solid white';
-        md.style.boxShadow = '0 0 15px rgba(79,70,229,0.7)';
-        const marker = new maplibregl.Marker({ element: md })
-          .setLngLat([coords[0][0], coords[0][1]])
-          .addTo(map);
+        md.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#4f46e5;border:3px solid white;box-shadow:0 0 15px rgba(79,70,229,0.7)';
+        const marker = new maplibregl.Marker({ element: md }).setLngLat([coords[0][0], coords[0][1]]).addTo(map);
         markerRef.current = marker;
         mapRef.current = map;
-        map.flyTo({ center: [coords[10][0], coords[10][1]], zoom: 9, duration: 800 });
+        map.flyTo({ center: [coords[10][0], coords[10][1]], zoom: 10, duration: 800 });
+        setReady(true);
       });
-    } catch (e: any) { setError('지도 초기화 실패: ' + e.message); }
+    } catch (e: any) { setError('지도 초기화 실패'); }
     return () => { mapRef.current?.remove(); mapRef.current = null; markerRef.current = null; };
-  }, [trainData, fromName, toName]);
+  }, [data, fromName, toName]);
 
+  // progress 기반 애니메이션 (단순하고 안정적)
   useEffect(() => {
-    if (!playing || !trainData || !markerRef.current) return;
-    try {
-      const { corridor, train } = trainData;
-      const coords = corridor.geometry.coordinates;
-      const line = turf.lineString(coords);
-      const stations = corridor.stations;
-      const fromIdx = train.stops.findIndex((s: any) => s.station === fromName);
-      const toIdx = train.stops.findIndex((s: any) => s.station === toName);
-      if (fromIdx < 0 || toIdx < 0) return;
+    if (!playing || !data || !markerRef.current || !mapRef.current || totalSec <= 0) return;
 
-      const segs: { fromDist: number; profile: any }[] = [];
-      for (let i = fromIdx; i < toIdx; i++) {
-        const s = train.stops[i], ns = train.stops[i + 1];
-        if (!s.departure || !ns.arrival) continue;
-        const [h1, m1] = s.departure.split(':').map(Number);
-        const [h2, m2] = ns.arrival.split(':').map(Number);
-        const segTime = (h2 * 60 + m2 - h1 * 60 - m1);
-        if (segTime <= 0) continue;
-        const fs = stations.find((x: any) => x.name === s.station);
-        const ts = stations.find((x: any) => x.name === ns.station);
-        if (!fs || !ts) continue;
-        const segDist = ts.corridor_dist_m - fs.corridor_dist_m;
-        if (segDist <= 0) continue;
-        const maxV = train.type === 'KTX' ? 85 : 40;
-        const accel = train.type === 'KTX' ? 0.5 : 0.7;
-        segs.push({ fromDist: fs.corridor_dist_m, profile: computeProfile(segDist, segTime, maxV, accel) });
+    const { corridor, train } = data;
+    const coords = corridor.geometry.coordinates;
+    const line = turf.lineString(coords);
+    const stations = corridor.stations;
+    const fromIdx = train.stops.findIndex((s: any) => s.station === fromName);
+    const toIdx = train.stops.findIndex((s: any) => s.station === toName);
+    if (fromIdx < 0 || toIdx < 0) return;
+
+    // 구간 데이터 미리 계산
+    const segs: { fromDist: number; toDist: number; segTime: number }[] = [];
+    for (let i = fromIdx; i < toIdx; i++) {
+      const s = train.stops[i], ns = train.stops[i + 1];
+      if (!s.departure || !ns.arrival) continue;
+      const [h1, m1] = s.departure.split(':').map(Number);
+      const [h2, m2] = ns.arrival.split(':').map(Number);
+      const segTime = (h2 * 60 + m2 - h1 * 60 - m1);
+      if (segTime <= 0) continue;
+      const fs = stations.find((x: any) => x.name === s.station);
+      const ts = stations.find((x: any) => x.name === ns.station);
+      if (!fs || !ts) continue;
+      segs.push({ fromDist: fs.corridor_dist_m, toDist: ts.corridor_dist_m, segTime });
+    }
+    if (segs.length === 0) return;
+
+    // 가감속 프로파일 (속도 표시용)
+    function calcSpeed(seg: any, t: number): number {
+      const D = seg.toDist - seg.fromDist;
+      const T = seg.segTime;
+      if (T <= 0) return 0;
+      const a = 0.5; // m/s²
+      let v = Math.min(85, a * T / 2);
+      let aTime = v / a;
+      let aDist = v * v / (2 * a);
+      if (2 * aDist >= D) {
+        v = Math.sqrt(a * D);
+        aTime = v / a;
       }
-      if (segs.length === 0) return;
+      if (t <= 0) return 0;
+      if (t >= T) return 0;
+      if (t < aTime) return a * t * 3.6;
+      if (t < T - aTime) return v * 3.6;
+      const dt = t - (T - aTime);
+      return Math.max(0, (v - a * dt)) * 3.6;
+    }
 
-      const totalSimTime = segs.reduce((s: number, seg: any) => s + seg.profile.totalTime, 0);
-      const startTime = performance.now();
-      playingRef.current = true;
+    playingRef.current = true;
+    const startTime = performance.now();
 
-      function animate() {
-        if (!playingRef.current || !markerRef.current) return;
-        const simElapsed = (performance.now() - startTime) / 1000 * speedRef.current;
+    function animate() {
+      if (!playingRef.current || !markerRef.current || !mapRef.current) return;
 
-        if (simElapsed >= totalSimTime) {
-          const lastSeg = segs[segs.length - 1];
-          const endPt = turf.along(line, lastSeg.fromDist + lastSeg.profile.totalDist, { units: 'meters' });
-          markerRef.current.setLngLat(endPt.geometry.coordinates as [number, number]);
-          setProgress(1); setCurrentSt(toName); setNextSt('');
-          setElapsedSec(totalSec); setPlaying(false); playingRef.current = false;
-          return;
-        }
+      const realSec = (performance.now() - startTime) / 1000;
+      const simSec = realSec * speedRef.current;
+      const p = Math.min(1, simSec / totalSec);
+      progressRef.current = p;
 
-        let segElapsed = simElapsed;
-        let curSeg = segs[0];
-        for (const seg of segs) {
-          if (simElapsed <= seg.profile.totalTime) { curSeg = seg; break; }
-          segElapsed -= seg.profile.totalTime;
-        }
-
-        const dist = curSeg.fromDist + posAtTime(curSeg.profile, Math.max(0, Math.min(segElapsed, curSeg.profile.totalTime)));
-        const pt = turf.along(line, dist, { units: 'meters' });
-        markerRef.current.setLngLat(pt.geometry.coordinates as [number, number]);
-        mapRef.current?.panTo(pt.geometry.coordinates as [number, number], { duration: 200, animate: true });
-
-        const spd = speedKmhAtTime(curSeg.profile, Math.max(0, Math.min(segElapsed, curSeg.profile.totalTime)));
-        setCurrentSpeed(Math.round(spd));
-
-        setProgress(Math.min(1, simElapsed / totalSimTime));
-        setElapsedSec(Math.min(totalSec, simElapsed));
-
-        let curIdx = fromIdx, el = 0;
-        for (let i = 0; i < segs.length; i++) {
-          if (el + segs[i].profile.totalTime >= simElapsed) { curIdx = fromIdx + i; break; }
-          el += segs[i].profile.totalTime;
-        }
-        if (curIdx < train.stops.length) {
-          setCurrentSt(train.stops[curIdx].station);
-          setNextSt(curIdx + 1 < train.stops.length ? train.stops[curIdx + 1].station : '');
-        }
-        animRef.current = requestAnimationFrame(animate);
+      if (p >= 1) {
+        const endPt = turf.along(line, segs[segs.length - 1].toDist, { units: 'meters' });
+        markerRef.current.setLngLat(endPt.geometry.coordinates as [number, number]);
+        setProgress(1); setCurrentSt(toName); setNextSt(''); setElapsedSec(totalSec); setCurSpeed(0);
+        setPlaying(false); playingRef.current = false;
+        return;
       }
+
+      // progress로 현재 위치 계산
+      const totalDist = segs[segs.length - 1].toDist - segs[0].fromDist;
+      const targetDist = segs[0].fromDist + totalDist * p;
+
+      // targetDist가 속한 segment 찾기
+      let segIdx = 0;
+      let segStartDist = segs[0].fromDist;
+      for (let i = 0; i < segs.length; i++) {
+        if (targetDist <= segs[i].toDist) { segIdx = i; segStartDist = segs[i].fromDist; break; }
+      }
+
+      // segment 내 progress
+      const seg = segs[segIdx];
+      const segTotalDist = seg.toDist - seg.fromDist;
+      const segP = segTotalDist > 0 ? (targetDist - segStartDist) / segTotalDist : 0;
+      const segT = seg.segTime * segP;
+
+      // 좌표
+      const pt = turf.along(line, Math.min(targetDist, segs[segs.length - 1].toDist), { units: 'meters' });
+      markerRef.current.setLngLat(pt.geometry.coordinates as [number, number]);
+      mapRef.current.panTo(pt.geometry.coordinates as [number, number], { duration: 200, animate: true });
+
+      // UI 업데이트
+      setProgress(p);
+      setElapsedSec(Math.round(simSec));
+
+      const curIdx = fromIdx + segIdx;
+      if (curIdx < train.stops.length) {
+        setCurrentSt(train.stops[curIdx].station);
+        setNextSt(curIdx + 1 < train.stops.length ? train.stops[curIdx + 1].station : '');
+      }
+
+      // 속도 (구간 내 위치 기준)
+      setCurSpeed(Math.round(calcSpeed(seg, segT)));
+
       animRef.current = requestAnimationFrame(animate);
-    } catch (e: any) { setError('애니메이션 오류: ' + e.message); }
+    }
+
+    animRef.current = requestAnimationFrame(animate);
     return () => { playingRef.current = false; cancelAnimationFrame(animRef.current); };
-  }, [playing, trainData, fromName, toName, totalSec]);
+  }, [playing, data, totalSec, fromName, toName]);
 
   const handleReset = () => {
     playingRef.current = false; setPlaying(false); cancelAnimationFrame(animRef.current);
-    setProgress(0); setElapsedSec(0); setCurrentSt(fromName); setNextSt(''); setCurrentSpeed(0);
-    if (markerRef.current && trainData) {
-      const c = trainData.corridor.geometry.coordinates;
+    setProgress(0); setElapsedSec(0); setCurrentSt(fromName); setNextSt(''); setCurSpeed(0);
+    if (markerRef.current && data) {
+      const c = data.corridor.geometry.coordinates;
       markerRef.current.setLngLat([c[0][0], c[0][1]]);
     }
   };
 
-  if (error) return <div className="w-full h-screen flex items-center justify-center bg-white"><div className="text-red-500">{error}</div></div>;
+  if (error) return <div style={{width:'100%',height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'white'}}><div style={{color:'red'}}>{error}</div></div>;
 
   return (
     <div style={{width:'100%',height:'100vh',position:'relative',overflow:'hidden',background:'#111827'}}>
       <div ref={containerRef} style={{position:'absolute',inset:0}} />
 
-      {!trainData && (
+      {!data && (
         <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#f9fafb',zIndex:10000}}>
-          <div style={{color:'#9ca3af',fontSize:'14px'}}>로딩 중...</div>
+          <div style={{color:'#9ca3af'}}>로딩 중...</div>
         </div>
       )}
 
-      {trainData && (
+      {data && (
         <div style={{position:'absolute',inset:0,zIndex:10000,pointerEvents:'none'}}>
           <div style={{position:'absolute',bottom:0,left:0,right:0,pointerEvents:'auto'}}>
-            <div style={{background:'white',borderTopLeftRadius:'16px',borderTopRightRadius:'16px',boxShadow:'0 25px 50px rgba(0,0,0,0.25)',padding:'16px 16px 24px',borderTop:'4px solid #3b82f6'}}>
-
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
-                <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-                  <span style={{fontSize:'12px',fontWeight:'700',padding:'2px 8px',borderRadius:'999px',color:'white',background:trainData.train.color}}>{trainData.train.type}</span>
-                  <span style={{fontSize:'14px',fontWeight:'600'}}>{trainData.train.name}</span>
+            <div style={{background:'white',borderTopLeftRadius:16,borderTopRightRadius:16,boxShadow:'0 25px 50px rgba(0,0,0,0.25)',padding:'16px 16px 24px',borderTop:'4px solid #3b82f6'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <span style={{fontSize:12,fontWeight:700,padding:'2px 8px',borderRadius:999,color:'white',background:data.train.color}}>{data.train.type}</span>
+                  <span style={{fontSize:14,fontWeight:600}}>{data.train.name}</span>
                 </div>
-                <span style={{fontSize:'12px',color:'#6b7280'}}>{fromName} → {toName}</span>
+                <span style={{fontSize:12,color:'#6b7280'}}>{fromName} → {toName}</span>
               </div>
-
-              <div style={{width:'100%',height:'8px',background:'#e5e7eb',borderRadius:'999px',overflow:'hidden',marginBottom:'12px'}}>
-                <div style={{height:'100%',background:'#3b82f6',borderRadius:'999px',transition:'width 300ms',width:`${progress*100}%`}} />
+              <div style={{width:'100%',height:8,background:'#e5e7eb',borderRadius:999,overflow:'hidden',marginBottom:12}}>
+                <div style={{height:'100%',background:'#3b82f6',borderRadius:999,transition:'width 100ms',width:`${progress*100}%`}} />
               </div>
-
-              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'4px',textAlign:'center',marginBottom:'12px'}}>
-                <div><div style={{fontSize:'10px',color:'#6b7280'}}>현재역</div><div style={{fontSize:'13px',fontWeight:'700',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{currentSt}</div></div>
-                <div><div style={{fontSize:'10px',color:'#6b7280'}}>다음역</div><div style={{fontSize:'13px',fontWeight:'700',color:'#2563eb',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nextSt||'도착'}</div></div>
-                <div><div style={{fontSize:'10px',color:'#6b7280'}}>경과</div><div style={{fontSize:'13px',fontWeight:'700'}}>{elapsedSec>0?Math.floor(elapsedSec/60)+'분':''}</div></div>
-                <div><div style={{fontSize:'10px',color:'#6b7280'}}>속도</div><div style={{fontSize:'13px',fontWeight:'700',color:'#059669'}}>{currentSpeed}km/h</div></div>
-                <div><div style={{fontSize:'10px',color:'#6b7280'}}>도착</div><div style={{fontSize:'13px',fontWeight:'700'}}>{arrivalTime||'-'}</div></div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:4,textAlign:'center',marginBottom:12}}>
+                <div><div style={{fontSize:10,color:'#6b7280'}}>현재역</div><div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{currentSt}</div></div>
+                <div><div style={{fontSize:10,color:'#6b7280'}}>다음역</div><div style={{fontSize:13,fontWeight:700,color:'#2563eb',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nextSt||'도착'}</div></div>
+                <div><div style={{fontSize:10,color:'#6b7280'}}>경과</div><div style={{fontSize:13,fontWeight:700}}>{elapsedSec>0?Math.floor(elapsedSec/60)+'분':''}</div></div>
+                <div><div style={{fontSize:10,color:'#6b7280'}}>속도</div><div style={{fontSize:13,fontWeight:700,color:'#059669'}}>{curSpeed}km/h</div></div>
+                <div><div style={{fontSize:10,color:'#6b7280'}}>도착</div><div style={{fontSize:13,fontWeight:700}}>{arrivalTime||'-'}</div></div>
               </div>
-
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-                  <button onClick={handleReset} style={{padding:'8px 12px',fontSize:'14px',background:'#f3f4f6',border:'none',borderRadius:'12px',fontWeight:'500',cursor:'pointer'}}>⟲</button>
-                  <button onClick={() => setPlaying(p=>!p)} style={{padding:'12px 32px',fontSize:'16px',fontWeight:'700',color:'white',background:'#2563eb',border:'none',borderRadius:'12px',boxShadow:'0 10px 15px -3px rgba(37,99,235,0.2)',cursor:'pointer'}}>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={handleReset} style={{padding:'8px 12px',fontSize:14,background:'#f3f4f6',border:'none',borderRadius:12,fontWeight:500,cursor:'pointer'}}>⟲</button>
+                  <button onClick={()=>setPlaying(p=>!p)} style={{padding:'12px 32px',fontSize:16,fontWeight:700,color:'white',background:'#2563eb',border:'none',borderRadius:12,boxShadow:'0 10px 15px -3px rgba(37,99,235,0.2)',cursor:'pointer'}}>
                     {playing ? '⏸ 정지' : '▶ 재생'}
                   </button>
                 </div>
-                <div style={{display:'flex',gap:'4px'}}>
+                <div style={{display:'flex',gap:4}}>
                   {[1,2,5,10].map(s => (
-                    <button key={s} onClick={()=>{setSpeedDisplay(s);speedRef.current=s}}
-                      style={{padding:'6px 12px',fontSize:'12px',fontWeight:'700',border:'none',borderRadius:'8px',cursor:'pointer',
-                        background: speedDisplay===s ? '#2563eb' : '#f3f4f6', color: speedDisplay===s ? 'white' : '#4b5563'}}>{s}×</button>
+                    <button key={s} onClick={()=>{setSpeedDisp(s);speedRef.current=s}}
+                      style={{padding:'6px 12px',fontSize:12,fontWeight:700,border:'none',borderRadius:8,cursor:'pointer',background:speedDisp===s?'#2563eb':'#f3f4f6',color:speedDisp===s?'white':'#4b5563'}}>{s}×</button>
                   ))}
                 </div>
               </div>
-
             </div>
           </div>
         </div>
