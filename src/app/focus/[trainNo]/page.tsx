@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -28,7 +28,6 @@ interface SegProfile {
 }
 
 function computeProfile(D: number, T: number, maxV: number, accel: number): SegProfile {
-  // 이분탐색으로 v 찾기
   let lo = 1, hi = maxV;
   for (let iter = 0; iter < 50; iter++) {
     const v = (lo + hi) / 2;
@@ -37,37 +36,28 @@ function computeProfile(D: number, T: number, maxV: number, accel: number): SegP
     const cruiseDist = D - 2 * accelDist;
     if (cruiseDist < 0) { hi = v; continue; }
     const cruiseTime = cruiseDist / v;
-    const totalTime = 2 * accelTime + cruiseTime;
-    if (totalTime > T) hi = v; else lo = v;
+    if (2 * accelTime + cruiseTime > T) hi = v; else lo = v;
   }
   let v = (lo + hi) / 2;
   if (v > maxV) v = maxV;
-
   let accelTime = v / accel;
   let accelDist = v * v / (2 * accel);
   let cruiseDist = D - 2 * accelDist;
-
-  // 삼각형 프로파일 (cruiseDist < 0)
   if (cruiseDist < 0) {
     v = Math.sqrt(accel * D);
     if (v > maxV) v = maxV;
     accelTime = v / accel;
     accelDist = v * v / (2 * accel);
-    cruiseDist = 0;
-    const decelTime = v / accel;
-    return { accelDist, cruiseDist: 0, decelDist: accelDist, accelTime, cruiseTime: 0, decelTime, v, a: accel, totalDist: D, totalTime: 2 * accelTime };
+    return { accelDist, cruiseDist: 0, decelDist: accelDist, accelTime, cruiseTime: 0, decelTime: accelTime, v, a: accel, totalDist: D, totalTime: 2 * accelTime };
   }
-
   const cruiseTime = cruiseDist / v;
   const decelTime = v / accel;
-  const totalTime = 2 * accelTime + cruiseTime;
-  return { accelDist, cruiseDist, decelDist: accelDist, accelTime, cruiseTime, decelTime, v, a: accel, totalDist: D, totalTime };
+  return { accelDist, cruiseDist, decelDist: accelDist, accelTime, cruiseTime, decelTime, v, a: accel, totalDist: D, totalTime: 2 * accelTime + cruiseTime };
 }
 
 function posAtTime(profile: SegProfile, elapsed: number): number {
   if (elapsed <= 0) return 0;
   if (elapsed >= profile.totalTime) return profile.totalDist;
-
   const { accelDist, cruiseDist, decelDist, accelTime, cruiseTime, decelTime, v, a } = profile;
   if (elapsed < accelTime) return 0.5 * a * elapsed * elapsed;
   const t1 = elapsed - accelTime;
@@ -76,8 +66,8 @@ function posAtTime(profile: SegProfile, elapsed: number): number {
   return accelDist + cruiseDist + v * t2 - 0.5 * a * t2 * t2;
 }
 
-/* ---- 메인 컴포넌트 ---- */
-export default function FocusPage() {
+/* ---- 포커스 화면 본체 ---- */
+function FocusContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const trainNo = params.trainNo as string;
@@ -86,20 +76,22 @@ export default function FocusPage() {
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
   const animRef = useRef<number>(0);
+  const playingRef = useRef(false);
+  const speedRef = useRef(5);
 
   const [data, setData] = useState<CorridorData | null>(null);
   const [train, setTrain] = useState<TrainRun | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(5);
-  const [progress, setProgress] = useState(0); // 0~1
+  const [progress, setProgress] = useState(0);
   const [currentStation, setCurrentStation] = useState(fromName);
   const [nextStation, setNextStation] = useState('');
-  const [currentTime, setCurrentTime] = useState('');
   const [arrivalTime, setArrivalTime] = useState('');
   const [elapsedSec, setElapsedSec] = useState(0);
   const [totalSec, setTotalSec] = useState(0);
-  const [markerEl, setMarkerEl] = useState<HTMLDivElement | null>(null);
+  const [ready, setReady] = useState(false);
 
   // 데이터 로드
   useEffect(() => {
@@ -110,11 +102,10 @@ export default function FocusPage() {
     });
   }, [trainNo]);
 
-  // 출발/도착 인덱스
   const fromIdx = data && train ? train.stops.findIndex(s => s.station === fromName) : -1;
   const toIdx = data && train ? train.stops.findIndex(s => s.station === toName) : -1;
 
-  // 총 소요시간 계산
+  // 총 소요시간
   useEffect(() => {
     if (!train || fromIdx < 0 || toIdx < 0) return;
     const dep = train.stops[fromIdx].departure;
@@ -122,16 +113,13 @@ export default function FocusPage() {
     if (!dep || !arr) return;
     const [h1, m1] = dep.split(':').map(Number);
     const [h2, m2] = arr.split(':').map(Number);
-    setTotalSec((h2 * 60 + m2) - (h1 * 60 + m1) * 60);
+    setTotalSec((h2 * 60 + m2 - h1 * 60 - m1));
     setArrivalTime(arr);
   }, [train, fromIdx, toIdx]);
 
-  // 초기화
-  const initRef = useRef(false);
-
   // MapLibre 초기화
   useEffect(() => {
-    if (!data || !train || !mapContainer.current || mapRef.current) return;
+    if (!data || !mapContainer.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
@@ -144,7 +132,7 @@ export default function FocusPage() {
     map.on('load', () => {
       const coords = data.corridor.geometry.coordinates as [number, number][];
 
-      // 전체 corridor
+      // 전체 corridor 라인
       map.addSource('corridor', {
         type: 'geojson',
         data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} }
@@ -159,49 +147,66 @@ export default function FocusPage() {
       data.corridor.stations.forEach(s => {
         const el = document.createElement('div');
         el.className = 'w-2 h-2 rounded-full bg-gray-400 border border-white';
+        el.style.width = '8px';
+        el.style.height = '8px';
+        el.style.borderRadius = '50%';
+        el.style.backgroundColor = '#9ca3af';
+        el.style.border = '2px solid white';
+        el.style.cursor = 'pointer';
         new maplibregl.Marker({ element: el })
           .setLngLat([s.lng, s.lat])
           .addTo(map);
       });
 
-      // 열차 마커
+      // 열차 마커 생성
       const markerDiv = document.createElement('div');
-      markerDiv.className = 'w-5 h-5 rounded-full border-2 border-white shadow-md';
-      markerDiv.style.backgroundColor = train.color;
-      markerDiv.style.boxShadow = '0 0 8px rgba(0,0,0,0.3)';
-      setMarkerEl(markerDiv);
+      markerDiv.className = 'train-marker';
+      markerDiv.style.width = '18px';
+      markerDiv.style.height = '18px';
+      markerDiv.style.borderRadius = '50%';
+      markerDiv.style.backgroundColor = '#4f46e5';
+      markerDiv.style.border = '3px solid white';
+      markerDiv.style.boxShadow = '0 0 12px rgba(79,70,229,0.6)';
+      markerDiv.style.transition = 'none';
 
-      const startCoord = coords[0];
-      new maplibregl.Marker({ element: markerDiv })
-        .setLngLat([startCoord[0], startCoord[1]])
+      const marker = new maplibregl.Marker({ element: markerDiv })
+        .setLngLat([coords[0][0], coords[0][1]])
         .addTo(map);
+      markerRef.current = marker;
+
+      // 첫 역으로 카메라 이동
+      const firstStation = data?.corridor.stations[0];
+      if (firstStation) {
+        map.flyTo({ center: [firstStation.lng, firstStation.lat], zoom: 9, duration: 1000 });
+      }
 
       mapRef.current = map;
-      initRef.current = true;
+      setReady(true);
     });
 
-    return () => { map.remove(); mapRef.current = null; };
-  }, [data, train]);
+    return () => { map.remove(); mapRef.current = null; markerRef.current = null; setReady(false); };
+  }, [data]);
 
-  // 재생 로직
-  useEffect(() => {
-    if (!playing || !data || !train || fromIdx < 0 || toIdx < 0 || totalSec <= 0) return;
+  // 애니메이션 루프
+  const animateRef = useRef<{ startTime: number; segments: any[]; totalSimTime: number } | null>(null);
+
+  const startAnimation = useCallback(() => {
+    if (!data || !train || fromIdx < 0 || toIdx < 0 || totalSec <= 0) return;
 
     const coords = data.corridor.geometry.coordinates as [number, number][];
     const line = turf.lineString(coords);
 
     // 구간별 profile 계산
     const segments: { fromDist: number; toDist: number; profile: SegProfile }[] = [];
-    let currentDist = 0;
 
     for (let i = fromIdx; i < toIdx; i++) {
       const stop = train.stops[i];
       const nextStop = train.stops[i + 1];
       if (!stop.departure || !nextStop.arrival) continue;
 
-      const depTime = stop.departure.split(':').map(Number);
-      const arrTime = nextStop.arrival.split(':').map(Number);
-      const segTimeSec = ((arrTime[0] * 60 + arrTime[1]) - (depTime[0] * 60 + depTime[1])) * 60;
+      const dep = stop.departure.split(':').map(Number);
+      const arr = nextStop.arrival.split(':').map(Number);
+      const segTimeSec = (arr[0] * 60 + arr[1] - dep[0] * 60 - dep[1]);
       if (segTimeSec <= 0) continue;
 
       const fromS = data.corridor.stations.find(s => s.name === stop.station);
@@ -211,116 +216,127 @@ export default function FocusPage() {
       const segDist = toS.corridor_dist_m - fromS.corridor_dist_m;
       if (segDist <= 0) continue;
 
-      const maxV = train.type === 'KTX' ? 85 : 40; // m/s
+      const maxV = train.type === 'KTX' ? 85 : 40;
       const accel = train.type === 'KTX' ? 0.3 : 0.4;
       const profile = computeProfile(segDist, segTimeSec, maxV, accel);
 
-      segments.push({
-        fromDist: fromS.corridor_dist_m,
-        toDist: toS.corridor_dist_m,
-        profile
-      });
+      segments.push({ fromDist: fromS.corridor_dist_m, toDist: toS.corridor_dist_m, profile });
     }
 
     if (segments.length === 0) return;
 
-    const startTime = Date.now();
-    let totalSegTime = segments.reduce((s, seg) => s + seg.profile.totalTime * 1000, 0);
-    totalSegTime /= speed;
+    const totalSimTime = segments.reduce((s, seg) => s + seg.profile.totalTime, 0);
+    const startTime = performance.now();
 
-    // 구간별 elapsed offset
-    const segOffsets: number[] = [0];
-    for (let i = 0; i < segments.length; i++) {
-      segOffsets.push(segOffsets[i] + segments[i].profile.totalTime * 1000 / speed);
-    }
+    animateRef.current = { startTime, segments, totalSimTime };
+    playingRef.current = true;
 
-    const marker = document.querySelector('.maplibregl-marker') as HTMLElement;
-    animRef.current = requestAnimationFrame(function animate() {
-      const now = Date.now();
-      const elapsed = (now - startTime) / 1000 * speed; // seconds in simulation time
+    const marker = markerRef.current;
+    if (!marker) return;
 
-      if (elapsed >= segments[segments.length - 1].profile.totalTime) {
+    function animateFrame() {
+      if (!playingRef.current) return;
+      const now = performance.now();
+      const realElapsed = (now - startTime) / 1000; // seconds real time
+      const simElapsed = realElapsed * speedRef.current; // seconds sim time
+
+      if (simElapsed >= totalSimTime) {
         // 도착
-        const endCoord = turf.along(line, segments[segments.length - 1].toDist, { units: 'meters' });
-        if (marker) {
-          marker.style.transform = `translate(-50%, -50%) translate(${endCoord.geometry.coordinates[0]}px, ${endCoord.geometry.coordinates[1]}px)`;
-        }
+        const lastSeg = segments[segments.length - 1];
+        const endPt = turf.along(line, lastSeg.toDist, { units: 'meters' });
+        marker.setLngLat(endPt.geometry.coordinates as [number, number]);
         setProgress(1);
         setCurrentStation(toName);
         setNextStation('');
         setElapsedSec(totalSec);
         setPlaying(false);
+        playingRef.current = false;
         return;
       }
 
-      // 현재 구간 찾기
+      // 현재 구간
+      let segElapsed = simElapsed;
       let segIdx = 0;
-      let segElapsed = elapsed;
       for (let i = 0; i < segments.length; i++) {
-        if (elapsed <= segments[i].profile.totalTime) { segIdx = i; break; }
+        if (simElapsed <= segments[i].profile.totalTime) { segIdx = i; break; }
         segElapsed -= segments[i].profile.totalTime;
       }
       if (segIdx >= segments.length) segIdx = segments.length - 1;
 
       const seg = segments[segIdx];
-      const dist = seg.fromDist + posAtTime(seg.profile, Math.max(0, Math.min(segElapsed, seg.profile.totalTime)));
+      const distAlong = seg.fromDist + posAtTime(seg.profile, Math.max(0, Math.min(segElapsed, seg.profile.totalTime)));
+      const pt = turf.along(line, distAlong, { units: 'meters' });
 
-      const pt = turf.along(line, dist, { units: 'meters' });
-      const [lng, lat] = pt.geometry.coordinates;
+      // 마커 이동
+      marker.setLngLat(pt.geometry.coordinates as [number, number]);
 
-      // MapLibre marker 이동
-      // Create new marker at position
-      if (markerEl && mapRef.current) {
-        // Remove old marker elements
-        document.querySelectorAll('.train-marker').forEach(el => el.remove());
-        const newMarker = document.createElement('div');
-        newMarker.className = `train-marker w-5 h-5 rounded-full border-2 border-white shadow-md`;
-        newMarker.style.backgroundColor = train.color;
-        newMarker.style.boxShadow = '0 0 8px rgba(0,0,0,0.3)';
-        new maplibregl.Marker({ element: newMarker })
-          .setLngLat([lng, lat])
-          .addTo(mapRef.current!);
-      }
-
-      // 카메라 따라가기
-      if (mapRef.current) {
-        mapRef.current.panTo([lng, lat], { duration: 0, animate: false });
-      }
+      // 지도 따라가기
+      mapRef.current?.panTo(pt.geometry.coordinates as [number, number], { duration: 200, animate: true });
 
       // 진행률
-      const totalSimTime = segments.reduce((s, seg) => s + seg.profile.totalTime, 0);
-      const prog = Math.min(1, elapsed / totalSimTime);
-      setProgress(prog);
+      setProgress(Math.min(1, simElapsed / totalSimTime));
+      setElapsedSec(Math.min(totalSec, simElapsed));
 
-      // 현재/다음역
-      let cur = fromIdx;
-      let nxt = fromIdx + 1;
+      // 현재역/다음역
+      let curIdx = fromIdx;
       let el = 0;
       for (let i = 0; i < segments.length; i++) {
-        if (el + segments[i].profile.totalTime >= elapsed) {
-          cur = fromIdx + i;
-          nxt = cur + 1;
-          break;
-        }
+        if (el + segments[i].profile.totalTime >= simElapsed) { curIdx = fromIdx + i; break; }
         el += segments[i].profile.totalTime;
       }
-      if (cur < train.stops.length) setCurrentStation(train.stops[cur].station);
-      if (nxt < train.stops.length) setNextStation(train.stops[nxt].station);
+      if (curIdx < train!.stops.length) {
+        setCurrentStation(train!.stops[curIdx].station);
+        const ns = curIdx + 1 < train!.stops.length ? train!.stops[curIdx + 1].station : '';
+        setNextStation(ns);
+      }
 
-      // 남은 시간
-      const remSec = Math.max(0, totalSec - elapsed);
-      setElapsedSec(elapsed);
+      animRef.current = requestAnimationFrame(animateFrame);
+    }
 
-      animRef.current = requestAnimationFrame(animate);
-    });
+    animRef.current = requestAnimationFrame(animateFrame);
+  }, [data, train, fromIdx, toIdx, fromName, toName, totalSec]);
 
-    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
-  }, [playing, data, train, fromIdx, toIdx, totalSec, speed]);
+  const togglePlay = useCallback(() => {
+    if (playing) {
+      playingRef.current = false;
+      setPlaying(false);
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    } else {
+      setPlaying(true);
+    }
+  }, [playing]);
 
-  const togglePlay = () => setPlaying(p => !p);
-  const reset = () => { setPlaying(false); setProgress(0); setElapsedSec(0); setCurrentStation(fromName); };
+  const reset = useCallback(() => {
+    playingRef.current = false;
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    setPlaying(false);
+    setProgress(0);
+    setElapsedSec(0);
+    setCurrentStation(fromName);
+    setNextStation('');
+
+    if (markerRef.current && data) {
+      const coords = data.corridor.geometry.coordinates as [number, number][];
+      markerRef.current.setLngLat([coords[0][0], coords[0][1]]);
+      const st = data.corridor.stations[0];
+      if (st) mapRef.current?.flyTo({ center: [st.lng, st.lat], zoom: 9, duration: 800 });
+    }
+  }, [fromName, data]);
+
+  // playing=true면 애니메이션 시작
+  useEffect(() => {
+    if (playing && ready) {
+      // 약간 지연했다가 시작 (지도가 준비될 시간)
+      const t = setTimeout(() => startAnimation(), 200);
+      return () => clearTimeout(t);
+    }
+  }, [playing, ready, startAnimation]);
+
+  // speed ref 동기화
+  useEffect(() => { speedRef.current = speed; }, [speed]);
 
   const formatTime = (sec: number) => {
+    if (sec <= 0) return '0분';
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${m}분 ${s}초`;
@@ -334,10 +350,9 @@ export default function FocusPage() {
 
   return (
     <div className="w-full h-screen relative bg-gray-900 overflow-hidden">
-      {/* 지도 */}
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* 진행 정보 카드 */}
+      {/* 진행 카드 */}
       <div className="absolute top-4 left-4 right-4 md:left-4 md:right-auto md:w-80 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-4 z-10">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -349,7 +364,6 @@ export default function FocusPage() {
           <span className="text-xs text-gray-500">{fromName} → {toName}</span>
         </div>
 
-        {/* 진행 바 */}
         <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mb-3">
           <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${progress * 100}%` }} />
         </div>
@@ -373,15 +387,10 @@ export default function FocusPage() {
           </div>
         </div>
 
-        {/* 컨트롤 */}
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
           <div className="flex items-center gap-2">
-            <button onClick={reset}
-              className="px-2.5 py-1.5 text-xs bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-              ⟲
-            </button>
-            <button onClick={togglePlay}
-              className="px-4 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+            <button onClick={reset} className="px-2.5 py-1.5 text-xs bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">⟲</button>
+            <button onClick={togglePlay} className="px-4 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
               {playing ? '⏸ 일시정지' : '▶ 재생'}
             </button>
           </div>
@@ -396,21 +405,27 @@ export default function FocusPage() {
         </div>
       </div>
 
-      {/* 모바일용 역 리스트 */}
+      {/* 모바일 역 리스트 */}
       <div className="absolute bottom-4 left-4 right-4 md:hidden bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-3 z-10 max-h-32 overflow-y-auto">
         <div className="text-xs text-gray-500 mb-1">경로</div>
         <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {train.stops.slice(fromIdx, toIdx + 1).map((s, i) => {
-            const isPassed = i / (toIdx - fromIdx) <= progress;
-            return (
-              <div key={s.station} className={`flex-shrink-0 text-center px-2 py-1 rounded-lg text-xs
-                ${isPassed ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                {s.station}
-              </div>
-            );
-          })}
+          {train.stops.slice(fromIdx, toIdx + 1).map((s, i) => (
+            <div key={s.station} className={`flex-shrink-0 text-center px-2 py-1 rounded-lg text-xs
+              ${i / (toIdx - fromIdx) <= progress ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+              {s.station}
+            </div>
+          ))}
         </div>
       </div>
     </div>
+  );
+}
+
+/* ---- Suspense Wrapper ---- */
+export default function FocusPage() {
+  return (
+    <Suspense fallback={<div className="w-full h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-400 text-sm">로딩 중...</div></div>}>
+      <FocusContent />
+    </Suspense>
   );
 }
