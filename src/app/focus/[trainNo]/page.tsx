@@ -231,20 +231,16 @@ function FocusContent() {
     animateRef.current = { startTime, segments, totalSimTime };
     playingRef.current = true;
 
-    const marker = markerRef.current;
-    if (!marker) return;
-
     function animateFrame() {
-      if (!playingRef.current) return;
+      if (!playingRef.current || !markerRef.current) return;
       const now = performance.now();
-      const realElapsed = (now - startTime) / 1000; // seconds real time
-      const simElapsed = realElapsed * speedRef.current; // seconds sim time
+      const realElapsed = (now - startTime) / 1000;
+      const simElapsed = realElapsed * speedRef.current;
 
       if (simElapsed >= totalSimTime) {
-        // 도착
         const lastSeg = segments[segments.length - 1];
         const endPt = turf.along(line, lastSeg.toDist, { units: 'meters' });
-        marker.setLngLat(endPt.geometry.coordinates as [number, number]);
+        markerRef.current!.setLngLat(endPt.geometry.coordinates as [number, number]);
         setProgress(1);
         setCurrentStation(toName);
         setNextStation('');
@@ -268,7 +264,7 @@ function FocusContent() {
       const pt = turf.along(line, distAlong, { units: 'meters' });
 
       // 마커 이동
-      marker.setLngLat(pt.geometry.coordinates as [number, number]);
+      markerRef.current!.setLngLat(pt.geometry.coordinates as [number, number]);
 
       // 지도 따라가기
       mapRef.current?.panTo(pt.geometry.coordinates as [number, number], { duration: 200, animate: true });
