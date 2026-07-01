@@ -349,7 +349,7 @@ function FocusContent() {
       <div ref={mapContainer} className="w-full h-full" />
 
       {/* 진행 카드 */}
-      <div className="absolute top-4 left-4 right-4 md:left-4 md:right-auto md:w-80 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-4 z-10">
+      <div className="absolute top-4 left-4 right-4 md:left-4 md:right-auto md:w-80 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-4 z-[100]">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: train.color }}>
