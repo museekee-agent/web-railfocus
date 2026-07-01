@@ -51,7 +51,7 @@ export default function FocusPage() {
   const markR = useRef<maplibregl.Marker | null>(null);
   const playingR = useRef(false);
   const speedR = useRef(1);
-  const animR = useRef<any>(0);
+  const animR = useRef(0);
   const startTR = useRef(0);
   const dataR = useRef<any>(null);
   const segsR = useRef<any[]>([]);
@@ -182,16 +182,54 @@ export default function FocusPage() {
       setNextSt(segIdx + 1 < segs.length ? dataR.current.train.stops[(dataR.current.train.stops.findIndex((s: any) => s.station === fromName) + segIdx + 1)].station : '');
     }
 
-    animR.current = setInterval(anim, 16);
-    return () => { playingR.current = false; clearInterval(animR.current); };
-  }, [playing, toName]);
+    animR.current = requestAnimationFrame(anim);
+    return () => { playingR.current = false; cancelAnimationFrame(animR.current); };
+  }, []); // 의존성 없음: playing 변화는 togglePlay에서 직접 처리
 
-  const reset = () => {
-    playingR.current = false; setPlaying(false); clearInterval(animR.current);
-    setProgress(0); setElapsed(0); setCurSt(fromName); setNextSt(''); setCurSpd(0);
-    if (markR.current && dataR.current) {
-      const c = dataR.current.corridor.geometry.coordinates;
-      markR.current.setLngLat([c[0][0], c[0][1]]);
+  // 재생/정지를 직접 처리 (useEffect 우회)
+  const togglePlay = () => {
+    if (playingR.current) {
+      playingR.current = false;
+      cancelAnimationFrame(animR.current);
+      setPlaying(false);
+    } else {
+      if (!markR.current || segsR.current.length === 0) return;
+      startTR.current = performance.now();
+      playingR.current = true;
+      setPlaying(true);
+      const toNameLocal = toName;
+      const fromIdx = dataR.current.train.stops.findIndex((s: any) => s.station === fromName);
+      function anim() {
+        if (!playingR.current || !markR.current || !mapR.current) return;
+        const simElapsed = (performance.now() - startTR.current) / 1000 * speedR.current;
+        const segs = segsR.current;
+        if (simElapsed >= totalSimR.current) {
+          const pt = turf.along(lineR.current, totalEndR.current, { units: 'meters' });
+          markR.current.setLngLat(pt.geometry.coordinates as [number, number]);
+          setProgress(1); setCurSt(toNameLocal); setNextSt(''); setElapsed(Math.round(totalSecR.current)); setCurSpd(0);
+          playingR.current = false; setPlaying(false);
+          return;
+        }
+        let segElapsed = simElapsed;
+        let segIdx = 0;
+        for (let i = 0; i < segs.length; i++) {
+          if (simElapsed <= segs[i].profile.totalTime) { segIdx = i; break; }
+          segElapsed -= segs[i].profile.totalTime;
+        }
+        if (segIdx >= segs.length) segIdx = segs.length - 1;
+        const seg = segs[segIdx];
+        const dist = seg.fromDist + posAtTime(seg.profile, Math.max(0, segElapsed));
+        const pt = turf.along(lineR.current, Math.min(dist, totalEndR.current), { units: 'meters' });
+        markR.current.setLngLat(pt.geometry.coordinates as [number, number]);
+        mapR.current.panTo(pt.geometry.coordinates as [number, number], { duration: 200, animate: true });
+        setProgress(Math.min(1, simElapsed / totalSimR.current));
+        setElapsed(Math.round(Math.min(totalSecR.current, simElapsed)));
+        setCurSpd(Math.round(speedKmh(seg.profile, Math.max(0, segElapsed))));
+        setCurSt(dataR.current.train.stops[fromIdx + segIdx].station);
+        setNextSt(segIdx + 1 < segs.length ? dataR.current.train.stops[fromIdx + segIdx + 1].station : '');
+        animR.current = requestAnimationFrame(anim);
+      }
+      animR.current = requestAnimationFrame(anim);
     }
   };
 
@@ -224,8 +262,15 @@ export default function FocusPage() {
               </div>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <div style={{display:'flex',gap:8}}>
-                  <button onClick={reset} style={{padding:'8px 12px',fontSize:14,background:'#f3f4f6',border:'none',borderRadius:12,fontWeight:500,cursor:'pointer'}}>⟲</button>
-                  <button onClick={()=>setPlaying(p=>!p)} style={{padding:'12px 32px',fontSize:16,fontWeight:700,color:'white',background:'#2563eb',border:'none',borderRadius:12,boxShadow:'0 10px 15px -3px rgba(37,99,235,0.2)',cursor:'pointer'}}>
+                  <button onClick={() => {
+                    playingR.current = false; setPlaying(false); cancelAnimationFrame(animR.current);
+                    setProgress(0); setElapsed(0); setCurSt(fromName); setNextSt(''); setCurSpd(0);
+                    if (markR.current && dataR.current) {
+                      const c = dataR.current.corridor.geometry.coordinates;
+                      markR.current.setLngLat([c[0][0], c[0][1]]);
+                    }
+                  }} style={{padding:'8px 12px',fontSize:14,background:'#f3f4f6',border:'none',borderRadius:12,fontWeight:500,cursor:'pointer'}}>⟲</button>
+                  <button onClick={togglePlay} style={{padding:'12px 32px',fontSize:16,fontWeight:700,color:'white',background:'#2563eb',border:'none',borderRadius:12,boxShadow:'0 10px 15px -3px rgba(37,99,235,0.2)',cursor:'pointer'}}>
                     {playing ? '⏸ 정지' : '▶ 재생'}
                   </button>
                 </div>
