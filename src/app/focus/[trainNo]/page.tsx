@@ -52,39 +52,46 @@ export default function FocusPage() {
   const playingR = useRef(false);
   const speedR = useRef(1);
   const animR = useRef(0);
-  const startT = useRef(0);
-  const [data, setData] = useState<any>(null);
+  const startTR = useRef(0);
+  const dataR = useRef<any>(null); // ref로 데이터 유지
+  const segsR = useRef<any[]>([]);
+  const totalSimR = useRef(0);
+  const totalEndR = useRef(0);
+  const totalSecR = useRef(0);
+  const lineR = useRef<any>(null);
+  const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [curSt, setCurSt] = useState(fromName);
   const [nextSt, setNextSt] = useState('');
   const [arrT, setArrT] = useState('');
   const [elapsed, setElapsed] = useState(0);
-  const [totalSec, setTotalSec] = useState(0);
   const [speedD, setSpeedD] = useState(1);
   const [curSpd, setCurSpd] = useState(0);
   const [err, setErr] = useState('');
+  const [trainColor, setTrainColor] = useState('#4f46e5');
+  const [trainType, setTrainType] = useState('');
 
+  // 1. 데이터 로드 + 지도 초기화 (한 번만)
   useEffect(() => {
     fetch('/data/gyeongbu-corridor.json').then(r => r.json()).then(d => {
       const t = d.train_runs.find((x: any) => x.train_no === trainNo);
       if (!t) { setErr('no train'); return; }
-      setData({ ...d, train: t });
+      const full = { ...d, train: t };
+      dataR.current = full;
+      setTrainColor(t.color);
+      setTrainType(t.type);
       const dep = t.stops.find((s: any) => s.station === fromName);
       const arr = t.stops.find((s: any) => s.station === toName);
       if (dep?.departure && arr?.arrival) {
         const [h1, m1] = dep.departure.split(':').map(Number);
         const [h2, m2] = arr.arrival.split(':').map(Number);
-        setTotalSec((h2 * 60 + m2) - (h1 * 60 + m1));
+        totalSecR.current = (h2 * 60 + m2 - h1 * 60 - m1);
         setArrT(arr.arrival);
       }
-    }).catch(() => setErr('load fail'));
-  }, [trainNo, fromName, toName]);
-
-  useEffect(() => {
-    if (!data || !mc.current || mapR.current) return;
-    try {
-      const coords = data.corridor.geometry.coordinates;
+      // 지도 초기화
+      if (!mc.current) return;
+      const coords = full.corridor.geometry.coordinates;
       const map = new maplibregl.Map({
         container: mc.current,
         style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
@@ -94,7 +101,7 @@ export default function FocusPage() {
       map.on('load', () => {
         map.addSource('c', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} } });
         map.addLayer({ id: 'cl', type: 'line', source: 'c', paint: { 'line-color': '#93c5fd', 'line-width': 3 } });
-        data.corridor.stations.forEach((s: any) => {
+        full.corridor.stations.forEach((s: any) => {
           const el = document.createElement('div');
           el.style.cssText = `width:${s.name===fromName||s.name===toName?'12':'6'}px;height:${s.name===fromName||s.name===toName?'12':'6'}px;border-radius:50%;background:${s.name===fromName||s.name===toName?'#3b82f6':'#9ca3af'};border:2px solid white`;
           new maplibregl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(map);
@@ -104,61 +111,58 @@ export default function FocusPage() {
         const mk = new maplibregl.Marker({ element: md }).setLngLat([coords[0][0], coords[0][1]]).addTo(map);
         markR.current = mk; mapR.current = map;
         map.flyTo({ center: [coords[10][0], coords[10][1]], zoom: 10, duration: 800 });
+        // 프로파일 미리 계산
+        const line = turf.lineString(coords);
+        lineR.current = line;
+        const stations = full.corridor.stations;
+        const fromIdx = t.stops.findIndex((s: any) => s.station === fromName);
+        const toIdx = t.stops.findIndex((s: any) => s.station === toName);
+        const maxV = t.type === 'KTX' ? 85 : 42;
+        const a = t.type === 'KTX' ? 0.5 : 0.194;
+        const segs: any[] = [];
+        for (let i = fromIdx; i < toIdx; i++) {
+          const s = t.stops[i], ns = t.stops[i + 1];
+          if (!s.departure || !ns.arrival) continue;
+          const [h1, m1] = s.departure.split(':').map(Number);
+          const [h2, m2] = ns.arrival.split(':').map(Number);
+          const T = (h2 * 60 + m2 - h1 * 60 - m1);
+          if (T <= 0) continue;
+          const fs = stations.find((x: any) => x.name === s.station);
+          const ts = stations.find((x: any) => x.name === ns.station);
+          if (!fs || !ts) continue;
+          segs.push({ fromDist: fs.corridor_dist_m, toDist: ts.corridor_dist_m, profile: computeProfile(ts.corridor_dist_m - fs.corridor_dist_m, T, maxV, a) });
+        }
+        segsR.current = segs;
+        totalSimR.current = segs.reduce((s: number, seg: any) => s + seg.profile.totalTime, 0);
+        totalEndR.current = segs.length > 0 ? segs[segs.length - 1].toDist : 0;
+        setReady(true);
       });
-    } catch (e: any) { setErr('map fail'); }
+    }).catch(() => setErr('load fail'));
     return () => { mapR.current?.remove(); mapR.current = null; markR.current = null; };
-  }, [data, fromName, toName]);
+  }, [trainNo, fromName, toName]);
 
+  // 2. 애니메이션 useEffect (playing만 의존)
   useEffect(() => {
-    if (!playing || !data || !markR.current || !mapR.current || totalSec <= 0) return;
+    if (!playing || !markR.current || !mapR.current || segsR.current.length === 0 || totalSecR.current <= 0) return;
 
-    const { corridor, train } = data;
-    const coords = corridor.geometry.coordinates;
-    const line = turf.lineString(coords);
-    const stations = corridor.stations;
-    const fromIdx = train.stops.findIndex((s: any) => s.station === fromName);
-    const toIdx = train.stops.findIndex((s: any) => s.station === toName);
-    if (fromIdx < 0 || toIdx < 0) return;
-
-    // maxV, a 설정
-    const maxV = train.type === 'KTX' ? 85 : 42; // m/s
-    const a = train.type === 'KTX' ? 0.5 : 0.194; // m/s² (0.7 km/h/s)
-
-    // 구간별 프로파일
-    const segs: { fromDist: number; toDist: number; profile: any }[] = [];
-    for (let i = fromIdx; i < toIdx; i++) {
-      const s = train.stops[i], ns = train.stops[i + 1];
-      if (!s.departure || !ns.arrival) continue;
-      const [h1, m1] = s.departure.split(':').map(Number);
-      const [h2, m2] = ns.arrival.split(':').map(Number);
-      const T = (h2 * 60 + m2 - h1 * 60 - m1);
-      if (T <= 0) continue;
-      const fs = stations.find((x: any) => x.name === s.station);
-      const ts = stations.find((x: any) => x.name === ns.station);
-      if (!fs || !ts) continue;
-      segs.push({ fromDist: fs.corridor_dist_m, toDist: ts.corridor_dist_m, profile: computeProfile(ts.corridor_dist_m - fs.corridor_dist_m, T, maxV, a) });
-    }
-    if (segs.length === 0) return;
-
-    const totalSimTime = segs.reduce((s: number, seg: any) => s + seg.profile.totalTime, 0);
-    const totalEndDist = segs[segs.length - 1].toDist;
-    startT.current = performance.now();
+    startTR.current = performance.now();
     playingR.current = true;
 
     function anim() {
       if (!playingR.current || !markR.current || !mapR.current) return;
-      const simElapsed = (performance.now() - startT.current) / 1000 * speedR.current;
+      const simElapsed = (performance.now() - startTR.current) / 1000 * speedR.current;
 
-      if (simElapsed >= totalSimTime) {
-        const pt = turf.along(line, totalEndDist, { units: 'meters' });
+      if (simElapsed >= totalSimR.current) {
+        const pt = turf.along(lineR.current, totalEndR.current, { units: 'meters' });
         markR.current.setLngLat(pt.geometry.coordinates as [number, number]);
-        setProgress(1); setCurSt(toName); setNextSt(''); setElapsed(totalSec); setCurSpd(0);
+        setProgress(1); setCurSt(toName); setNextSt(''); setElapsed(Math.round(totalSecR.current)); setCurSpd(0);
         setPlaying(false); playingR.current = false;
         return;
       }
 
       let segElapsed = simElapsed;
       let segIdx = 0;
+      const segs = segsR.current;
       for (let i = 0; i < segs.length; i++) {
         if (simElapsed <= segs[i].profile.totalTime) { segIdx = i; break; }
         segElapsed -= segs[i].profile.totalTime;
@@ -167,32 +171,28 @@ export default function FocusPage() {
 
       const seg = segs[segIdx];
       const dist = seg.fromDist + posAtTime(seg.profile, Math.max(0, segElapsed));
-      const pt = turf.along(line, Math.min(dist, totalEndDist), { units: 'meters' });
+      const pt = turf.along(lineR.current, Math.min(dist, totalEndR.current), { units: 'meters' });
       markR.current.setLngLat(pt.geometry.coordinates as [number, number]);
       mapR.current.panTo(pt.geometry.coordinates as [number, number], { duration: 200, animate: true });
 
-      setProgress(Math.min(1, simElapsed / totalSimTime));
-      setElapsed(Math.round(Math.min(totalSec, simElapsed)));
+      setProgress(Math.min(1, simElapsed / totalSimR.current));
+      setElapsed(Math.round(Math.min(totalSecR.current, simElapsed)));
       setCurSpd(Math.round(speedKmh(seg.profile, Math.max(0, segElapsed))));
-
-      const curIdx = fromIdx + segIdx;
-      if (curIdx < train.stops.length) {
-        setCurSt(train.stops[curIdx].station);
-        setNextSt(curIdx + 1 < train.stops.length ? train.stops[curIdx + 1].station : '');
-      }
+      setCurSt(dataR.current.train.stops[(dataR.current.train.stops.findIndex((s: any) => s.station === fromName) + segIdx)].station);
+      setNextSt(segIdx + 1 < segs.length ? dataR.current.train.stops[(dataR.current.train.stops.findIndex((s: any) => s.station === fromName) + segIdx + 1)].station : '');
 
       animR.current = requestAnimationFrame(anim);
     }
 
     animR.current = requestAnimationFrame(anim);
     return () => { playingR.current = false; cancelAnimationFrame(animR.current); };
-  }, [playing, data, totalSec, fromName, toName]);
+  }, [playing, toName]);
 
   const reset = () => {
     playingR.current = false; setPlaying(false); cancelAnimationFrame(animR.current);
     setProgress(0); setElapsed(0); setCurSt(fromName); setNextSt(''); setCurSpd(0);
-    if (markR.current && data) {
-      const c = data.corridor.geometry.coordinates;
+    if (markR.current && dataR.current) {
+      const c = dataR.current.corridor.geometry.coordinates;
       markR.current.setLngLat([c[0][0], c[0][1]]);
     }
   };
@@ -202,15 +202,15 @@ export default function FocusPage() {
   return (
     <div style={{width:'100%',height:'100vh',position:'relative',overflow:'hidden',background:'#111827'}}>
       <div ref={mc} style={{position:'absolute',inset:0}} />
-      {!data && <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#f9fafb',zIndex:10000}}><div style={{color:'#9ca3af'}}>로딩 중...</div></div>}
-      {data && (
+      {!ready && <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#f9fafb',zIndex:10000}}><div style={{color:'#9ca3af'}}>로딩 중...</div></div>}
+      {ready && (
         <div style={{position:'absolute',inset:0,zIndex:10000,pointerEvents:'none'}}>
           <div style={{position:'absolute',bottom:0,left:0,right:0,pointerEvents:'auto'}}>
             <div style={{background:'white',borderTopLeftRadius:16,borderTopRightRadius:16,boxShadow:'0 25px 50px rgba(0,0,0,0.25)',padding:'16px 16px 24px',borderTop:'4px solid #3b82f6'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  <span style={{fontSize:12,fontWeight:700,padding:'2px 8px',borderRadius:999,color:'white',background:data.train.color}}>{data.train.type}</span>
-                  <span style={{fontSize:14,fontWeight:600}}>{data.train.name}</span>
+                  <span style={{fontSize:12,fontWeight:700,padding:'2px 8px',borderRadius:999,color:'white',background:trainColor}}>{trainType}</span>
+                  <span style={{fontSize:14,fontWeight:600}}>{trainNo}</span>
                 </div>
                 <span style={{fontSize:12,color:'#6b7280'}}>{fromName} → {toName}</span>
               </div>
