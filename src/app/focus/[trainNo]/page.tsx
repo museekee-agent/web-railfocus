@@ -348,8 +348,8 @@ function FocusContent() {
     <div className="w-full h-screen relative bg-gray-900 overflow-hidden">
       <div ref={mapContainer} className="w-full h-full" />
 
-      {/* 진행 카드 */}
-      <div className="absolute top-4 left-4 right-4 md:left-4 md:right-auto md:w-80 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-4 z-[100]">
+      {/* 진행 카드 - 모바일 하단 고정, 데스크탑 좌상단 */}
+      <div className="absolute bottom-0 left-0 right-0 md:top-4 md:left-4 md:right-auto md:w-80 md:bottom-auto bg-white rounded-t-2xl md:rounded-xl shadow-2xl p-4 md:p-4 z-[100] border-t-4 md:border-t-0 border-blue-500">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: train.color }}>
@@ -360,40 +360,40 @@ function FocusContent() {
           <span className="text-xs text-gray-500">{fromName} → {toName}</span>
         </div>
 
-        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mb-3">
+        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-3">
           <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${progress * 100}%` }} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="grid grid-cols-4 gap-2 text-center mb-3">
           <div>
-            <div className="text-xs text-gray-500">현재역</div>
-            <div className="font-semibold text-gray-900">{currentStation}</div>
+            <div className="text-[10px] text-gray-500">현재역</div>
+            <div className="text-sm font-bold text-gray-900 truncate">{currentStation}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">다음역</div>
-            <div className="font-semibold text-blue-600">{nextStation || '도착'}</div>
+            <div className="text-[10px] text-gray-500">다음역</div>
+            <div className="text-sm font-bold text-blue-600 truncate">{nextStation || '도착'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">경과</div>
-            <div className="font-semibold text-gray-900">{formatTime(elapsedSec)}</div>
+            <div className="text-[10px] text-gray-500">경과</div>
+            <div className="text-sm font-bold text-gray-900">{formatTime(elapsedSec)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">도착예정</div>
-            <div className="font-semibold text-gray-900">{arrivalTime || '-'}</div>
+            <div className="text-[10px] text-gray-500">도착</div>
+            <div className="text-sm font-bold text-gray-900">{arrivalTime || '-'}</div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button onClick={reset} className="px-2.5 py-1.5 text-xs bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">⟲</button>
-            <button onClick={togglePlay} className="px-4 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-              {playing ? '⏸ 일시정지' : '▶ 재생'}
+            <button onClick={reset} className="px-3 py-2 text-sm bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors font-medium">⟲</button>
+            <button onClick={togglePlay} className="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors shadow-md shadow-blue-200">
+              {playing ? '⏸ 정지' : '▶ 재생'}
             </button>
           </div>
           <div className="flex items-center gap-1">
             {[1, 2, 5, 10].map(s => (
               <button key={s} onClick={() => setSpeed(s)}
-                className={`px-2 py-1 text-xs rounded-lg transition-colors ${speed === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-colors ${speed === s ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                 {s}×
               </button>
             ))}
@@ -401,18 +401,7 @@ function FocusContent() {
         </div>
       </div>
 
-      {/* 모바일 역 리스트 */}
-      <div className="absolute bottom-4 left-4 right-4 md:hidden bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-3 z-10 max-h-32 overflow-y-auto">
-        <div className="text-xs text-gray-500 mb-1">경로</div>
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {train.stops.slice(fromIdx, toIdx + 1).map((s, i) => (
-            <div key={s.station} className={`flex-shrink-0 text-center px-2 py-1 rounded-lg text-xs
-              ${i / (toIdx - fromIdx) <= progress ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-              {s.station}
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* 역 리스트 (모바일 하단 카드 안에 이미 표시됨) */}
     </div>
   );
 }
