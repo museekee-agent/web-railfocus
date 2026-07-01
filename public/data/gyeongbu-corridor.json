@@ -2110,132 +2110,132 @@
         },
         {
           "station": "용산",
-          "arrival": "06:01",
-          "departure": "06:02"
+          "arrival": "06:03",
+          "departure": "06:04"
         },
         {
           "station": "영등포",
-          "arrival": "06:05",
-          "departure": "06:06"
+          "arrival": "06:09",
+          "departure": "06:10"
         },
         {
           "station": "안양",
-          "arrival": "06:12",
-          "departure": "06:12"
-        },
-        {
-          "station": "수원",
-          "arrival": "06:20",
+          "arrival": "06:21",
           "departure": "06:21"
         },
         {
+          "station": "수원",
+          "arrival": "06:36",
+          "departure": "06:37"
+        },
+        {
           "station": "오산",
-          "arrival": "06:28",
-          "departure": "06:28"
-        },
-        {
-          "station": "평택",
-          "arrival": "06:37",
-          "departure": "06:38"
-        },
-        {
-          "station": "성환",
-          "arrival": "06:43",
-          "departure": "06:43"
-        },
-        {
-          "station": "천안",
-          "arrival": "06:49",
+          "arrival": "06:50",
           "departure": "06:50"
         },
         {
+          "station": "평택",
+          "arrival": "07:06",
+          "departure": "07:07"
+        },
+        {
+          "station": "성환",
+          "arrival": "07:15",
+          "departure": "07:15"
+        },
+        {
+          "station": "천안",
+          "arrival": "07:26",
+          "departure": "07:27"
+        },
+        {
           "station": "전의",
-          "arrival": "06:57",
-          "departure": "06:57"
+          "arrival": "07:40",
+          "departure": "07:40"
         },
         {
           "station": "조치원",
-          "arrival": "07:03",
-          "departure": "07:03"
+          "arrival": "07:51",
+          "departure": "07:51"
         },
         {
           "station": "부강",
-          "arrival": "07:08",
-          "departure": "07:08"
+          "arrival": "08:00",
+          "departure": "08:00"
         },
         {
           "station": "대전",
-          "arrival": "07:19",
-          "departure": "07:20"
+          "arrival": "08:20",
+          "departure": "08:21"
         },
         {
           "station": "옥천",
-          "arrival": "07:26",
-          "departure": "07:26"
+          "arrival": "08:32",
+          "departure": "08:32"
         },
         {
           "station": "영동",
-          "arrival": "07:38",
-          "departure": "07:38"
+          "arrival": "08:54",
+          "departure": "08:54"
         },
         {
           "station": "황간",
-          "arrival": "07:44",
-          "departure": "07:44"
+          "arrival": "09:05",
+          "departure": "09:05"
         },
         {
           "station": "추풍령",
-          "arrival": "07:49",
-          "departure": "07:49"
+          "arrival": "09:14",
+          "departure": "09:14"
         },
         {
           "station": "김천",
-          "arrival": "07:55",
-          "departure": "07:56"
+          "arrival": "09:25",
+          "departure": "09:26"
         },
         {
           "station": "구미",
-          "arrival": "08:06",
-          "departure": "08:07"
+          "arrival": "09:44",
+          "departure": "09:45"
         },
         {
           "station": "대구",
-          "arrival": "08:25",
-          "departure": "08:26"
+          "arrival": "10:17",
+          "departure": "10:18"
         },
         {
           "station": "경산",
-          "arrival": "08:34",
-          "departure": "08:35"
+          "arrival": "10:33",
+          "departure": "10:34"
         },
         {
           "station": "밀양",
-          "arrival": "08:54",
-          "departure": "08:55"
+          "arrival": "11:09",
+          "departure": "11:10"
         },
         {
           "station": "삼랑진",
-          "arrival": "09:01",
-          "departure": "09:01"
+          "arrival": "11:20",
+          "departure": "11:20"
         },
         {
           "station": "원동",
-          "arrival": "09:06",
-          "departure": "09:06"
+          "arrival": "11:30",
+          "departure": "11:30"
         },
         {
           "station": "물금",
-          "arrival": "09:09",
-          "departure": "09:09"
+          "arrival": "11:35",
+          "departure": "11:35"
         },
         {
           "station": "구포",
-          "arrival": "09:15",
-          "departure": "09:16"
+          "arrival": "11:46",
+          "departure": "11:47"
         },
         {
           "station": "부산",
-          "arrival": "09:21",
+          "arrival": "11:57",
           "departure": null
         }
       ]
@@ -2263,132 +2263,132 @@
         },
         {
           "station": "용산",
-          "arrival": "07:03",
-          "departure": "07:04"
+          "arrival": "07:05",
+          "departure": "07:06"
         },
         {
           "station": "영등포",
-          "arrival": "07:09",
-          "departure": "07:10"
+          "arrival": "07:16",
+          "departure": "07:17"
         },
         {
           "station": "안양",
-          "arrival": "07:23",
-          "departure": "07:24"
+          "arrival": "07:40",
+          "departure": "07:41"
         },
         {
           "station": "수원",
-          "arrival": "07:41",
-          "departure": "07:42"
+          "arrival": "08:11",
+          "departure": "08:12"
         },
         {
           "station": "오산",
-          "arrival": "07:57",
-          "departure": "07:58"
-        },
-        {
-          "station": "평택",
-          "arrival": "08:15",
-          "departure": "08:16"
-        },
-        {
-          "station": "성환",
-          "arrival": "08:25",
-          "departure": "08:26"
-        },
-        {
-          "station": "천안",
           "arrival": "08:38",
           "departure": "08:39"
         },
         {
+          "station": "평택",
+          "arrival": "09:10",
+          "departure": "09:11"
+        },
+        {
+          "station": "성환",
+          "arrival": "09:27",
+          "departure": "09:28"
+        },
+        {
+          "station": "천안",
+          "arrival": "09:49",
+          "departure": "09:50"
+        },
+        {
           "station": "전의",
-          "arrival": "08:54",
-          "departure": "08:55"
+          "arrival": "10:17",
+          "departure": "10:18"
         },
         {
           "station": "조치원",
-          "arrival": "09:08",
-          "departure": "09:09"
+          "arrival": "10:41",
+          "departure": "10:42"
         },
         {
           "station": "부강",
-          "arrival": "09:20",
-          "departure": "09:21"
+          "arrival": "11:01",
+          "departure": "11:02"
         },
         {
           "station": "대전",
-          "arrival": "09:43",
-          "departure": "09:44"
+          "arrival": "11:42",
+          "departure": "11:43"
         },
         {
           "station": "옥천",
-          "arrival": "09:56",
-          "departure": "09:57"
+          "arrival": "12:05",
+          "departure": "12:06"
         },
         {
           "station": "영동",
-          "arrival": "10:21",
-          "departure": "10:22"
+          "arrival": "12:49",
+          "departure": "12:50"
         },
         {
           "station": "황간",
-          "arrival": "10:35",
-          "departure": "10:36"
+          "arrival": "13:13",
+          "departure": "13:14"
         },
         {
           "station": "추풍령",
-          "arrival": "10:46",
-          "departure": "10:47"
+          "arrival": "13:32",
+          "departure": "13:33"
         },
         {
           "station": "김천",
-          "arrival": "10:59",
-          "departure": "11:00"
+          "arrival": "13:55",
+          "departure": "13:56"
         },
         {
           "station": "구미",
-          "arrival": "11:19",
-          "departure": "11:20"
+          "arrival": "14:31",
+          "departure": "14:32"
         },
         {
           "station": "대구",
-          "arrival": "11:55",
-          "departure": "11:56"
+          "arrival": "15:35",
+          "departure": "15:36"
         },
         {
           "station": "경산",
-          "arrival": "12:13",
-          "departure": "12:14"
+          "arrival": "16:07",
+          "departure": "16:08"
         },
         {
           "station": "밀양",
-          "arrival": "12:53",
-          "departure": "12:54"
+          "arrival": "17:18",
+          "departure": "17:19"
         },
         {
           "station": "삼랑진",
-          "arrival": "13:05",
-          "departure": "13:06"
+          "arrival": "17:39",
+          "departure": "17:40"
         },
         {
           "station": "원동",
-          "arrival": "13:17",
-          "departure": "13:18"
+          "arrival": "18:00",
+          "departure": "18:01"
         },
         {
           "station": "물금",
-          "arrival": "13:24",
-          "departure": "13:25"
+          "arrival": "18:11",
+          "departure": "18:12"
         },
         {
           "station": "구포",
-          "arrival": "13:37",
-          "departure": "13:38"
+          "arrival": "18:34",
+          "departure": "18:35"
         },
         {
           "station": "부산",
-          "arrival": "13:49",
+          "arrival": "18:54",
           "departure": null
         }
       ]

@@ -20,9 +20,31 @@ function computeProfile(D: number, T: number, maxV: number, accel: number) {
     v = Math.sqrt(accel * D);
     if (v > maxV) v = maxV;
     aTime = v / accel; aDist = v * v / (2 * accel);
-    return { accelDist: aDist, cruiseDist: 0, decelDist: aDist, accelTime: aTime, cruiseTime: 0, decelTime: aTime, v, a: accel, totalDist: D, totalTime: 2 * aTime };
+    let totalT = 2 * aTime;
+    // T보다 크면 속도를 더 높여서 T에 맞춤 (도착시각 정확도 우선)
+    if (totalT > T) {
+      v = Math.min(maxV, accel * T / 2 + Math.sqrt(accel * D + accel * accel * T * T / 4) / 2);
+      aTime = v / accel; aDist = v * v / (2 * accel);
+      totalT = 2 * aTime;
+    }
+    return { accelDist: aDist, cruiseDist: 0, decelDist: aDist, accelTime: aTime, cruiseTime: 0, decelTime: aTime, v, a: accel, totalDist: D, totalTime: Math.max(totalT, T) };
   }
-  return { accelDist: aDist, cruiseDist: cDist, decelDist: aDist, accelTime: aTime, cruiseTime: cDist / v, decelTime: aTime, v, a: accel, totalDist: D, totalTime: 2 * aTime + cDist / v };
+  const cruiseTime = cDist / v;
+  let totalT = 2 * aTime + cruiseTime;
+  // T보다 크면 cruise 없이 삼각형으로 전환 후 위 로직 반복
+  if (totalT > T) {
+    v = Math.sqrt(accel * D);
+    if (v > maxV) v = maxV;
+    aTime = v / accel; aDist = v * v / (2 * accel);
+    totalT = 2 * aTime;
+    if (totalT > T) {
+      v = Math.min(maxV, accel * T / 2 + Math.sqrt(accel * D + accel * accel * T * T / 4));
+      aTime = v / accel; aDist = v * v / (2 * accel);
+      totalT = 2 * aTime;
+    }
+    return { accelDist: aDist, cruiseDist: 0, decelDist: aDist, accelTime: aTime, cruiseTime: 0, decelTime: aTime, v, a: accel, totalDist: D, totalTime: Math.max(totalT, T) };
+  }
+  return { accelDist: aDist, cruiseDist: cDist, decelDist: aDist, accelTime: aTime, cruiseTime, decelTime: aTime, v, a: accel, totalDist: D, totalTime: totalT };
 }
 
 function posAtTime(p: any, elapsed: number) {
@@ -167,7 +189,7 @@ export default function FocusPage() {
         const segDist = ts.corridor_dist_m - fs.corridor_dist_m;
         if (segDist <= 0) continue;
         const maxV = train.type === 'KTX' ? 85 : 40;
-        const accel = train.type === 'KTX' ? 0.3 : 0.4;
+        const accel = train.type === 'KTX' ? 0.5 : 0.7;
         segs.push({ fromDist: fs.corridor_dist_m, profile: computeProfile(segDist, segTime, maxV, accel) });
       }
       if (segs.length === 0) return;
