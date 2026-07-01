@@ -52,6 +52,7 @@ export default function FocusPage() {
   const playingR = useRef(false);
   const speedR = useRef(1);
   const animR = useRef(0);
+  const startT = useRef(0);
   const [data, setData] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -141,12 +142,12 @@ export default function FocusPage() {
 
     const totalSimTime = segs.reduce((s: number, seg: any) => s + seg.profile.totalTime, 0);
     const totalEndDist = segs[segs.length - 1].toDist;
-    const startTime = performance.now();
+    startT.current = performance.now();
     playingR.current = true;
 
     function anim() {
       if (!playingR.current || !markR.current || !mapR.current) return;
-      const simElapsed = (performance.now() - startTime) / 1000 * speedR.current;
+      const simElapsed = (performance.now() - startT.current) / 1000 * speedR.current;
 
       if (simElapsed >= totalSimTime) {
         const pt = turf.along(line, totalEndDist, { units: 'meters' });
