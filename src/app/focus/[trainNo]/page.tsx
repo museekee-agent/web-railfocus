@@ -21,7 +21,7 @@ function computeProfile(D: number, T: number, maxV: number, accel: number) {
     const v2 = Math.sqrt(accel * D);
     const aTime2 = v2 / accel;
     const totalTime2 = 2 * aTime2;
-    return { accelDist: D / 2, cruiseDist: 0, decelDist: D / 2, accelTime: aTime2, cruiseTime: 0, decelTime: aTime2, v: v2, a: accel, totalDist: D, totalTime: Math.max(totalTime2, T) };
+    return { accelDist: D / 2, cruiseDist: 0, decelDist: D / 2, accelTime: aTime2, cruiseTime: 0, decelTime: aTime2, v: v2, a: accel, totalDist: D, totalTime: totalTime2 };
   }
   
   // 사다리꼴: cruise 구간으로 T를 정확히 맞춤
@@ -33,11 +33,12 @@ function computeProfile(D: number, T: number, maxV: number, accel: number) {
 function posAtTime(p: any, elapsed: number) {
   if (elapsed <= 0) return 0;
   if (elapsed >= p.totalTime) return p.totalDist;
-  if (elapsed < p.accelTime) return 0.5 * p.a * elapsed * elapsed;
+  if (elapsed < p.accelTime) return Math.min(0.5 * p.a * elapsed * elapsed, p.totalDist);
   const t1 = elapsed - p.accelTime;
-  if (t1 < p.cruiseTime) return p.accelDist + p.v * t1;
+  if (t1 < p.cruiseTime) return Math.min(p.accelDist + p.v * t1, p.totalDist);
   const t2 = t1 - p.cruiseTime;
-  return p.accelDist + p.cruiseDist + p.v * t2 - 0.5 * p.a * t2 * t2;
+  const d = p.accelDist + p.cruiseDist + p.v * t2 - 0.5 * p.a * t2 * t2;
+  return Math.min(Math.max(d, 0), p.totalDist);
 }
 
 function speedKmhAtTime(p: any, elapsed: number): number {
