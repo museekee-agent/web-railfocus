@@ -31,7 +31,7 @@ function posAtTime(p: any, elapsed: number) {
 }
 
 function speedKmh(p: any, elapsed: number) {
-  if (elapsed <= 0 || elapsed >= p.totalTime - 0.05) return 0;
+  if (elapsed <= 0 || elapsed >= p.totalTime - 0.5) return 0;
   if (elapsed < p.accelTime) return p.a * elapsed * 3.6;
   const t1 = elapsed - p.accelTime;
   if (t1 < p.cruiseTime) return p.v * 3.6;
