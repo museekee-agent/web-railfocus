@@ -72,13 +72,12 @@ export default function FocusPage() {
   const [trainColor, setTrainColor] = useState('#4f46e5');
   const [trainType, setTrainType] = useState('');
 
-  // 1. 데이터 로드 + 지도 초기화 (한 번만)
+  // 데이터 로드 + 지도
   useEffect(() => {
     fetch('/data/gyeongbu-corridor.json').then(r => r.json()).then(d => {
       const t = d.train_runs.find((x: any) => x.train_no === trainNo);
       if (!t) { setErr('no train'); return; }
-      const full = { ...d, train: t };
-      dataR.current = full;
+      dataR.current = { ...d, train: t };
       setTrainColor(t.color);
       setTrainType(t.type);
       const dep = t.stops.find((s: any) => s.station === fromName);
@@ -89,32 +88,29 @@ export default function FocusPage() {
         totalSecR.current = (h2 * 60 + m2 - h1 * 60 - m1);
         setArrT(arr.arrival);
       }
-      // 지도 초기화
       if (!mc.current) return;
-      const coords = full.corridor.geometry.coordinates;
+      const coords = d.corridor.geometry.coordinates;
       const map = new maplibregl.Map({
-        container: mc.current,
-        style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+        container: mc.current, style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         center: [128.0, 36.3], zoom: 8, attributionControl: false,
       });
       map.addControl(new maplibregl.FullscreenControl({ container: document.body }), 'top-right');
       map.on('load', () => {
         map.addSource('c', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} } });
         map.addLayer({ id: 'cl', type: 'line', source: 'c', paint: { 'line-color': '#93c5fd', 'line-width': 3 } });
-        full.corridor.stations.forEach((s: any) => {
+        d.corridor.stations.forEach((s: any) => {
           const el = document.createElement('div');
-          el.style.cssText = `width:${s.name===fromName||s.name===toName?'12':'6'}px;height:${s.name===fromName||s.name===toName?'12':'6'}px;border-radius:50%;background:${s.name===fromName||s.name===toName?'#3b82f6':'#9ca3af'};border:2px solid white`;
+          const sz = s.name === fromName || s.name === toName ? '12' : '6';
+          el.style.cssText = `width:${sz}px;height:${sz}px;border-radius:50%;background:${s.name===fromName||s.name===toName?'#3b82f6':'#9ca3af'};border:2px solid white`;
           new maplibregl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(map);
         });
         const md = document.createElement('div');
-        md.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#4f46e5;border:3px solid white;box-shadow:0 0 15px rgba(79,70,229,0.7)';
+        md.style.cssText = 'width:22px;height:22px;border-radius:50%;background:' + t.color + ';border:3px solid white;box-shadow:0 0 15px rgba(79,70,229,0.7)';
         const mk = new maplibregl.Marker({ element: md }).setLngLat([coords[0][0], coords[0][1]]).addTo(map);
         markR.current = mk; mapR.current = map;
         map.flyTo({ center: [coords[10][0], coords[10][1]], zoom: 10, duration: 800 });
-        // 프로파일 미리 계산
         const line = turf.lineString(coords);
         lineR.current = line;
-        const stations = full.corridor.stations;
         const fromIdx = t.stops.findIndex((s: any) => s.station === fromName);
         const toIdx = t.stops.findIndex((s: any) => s.station === toName);
         const maxV = t.type === 'KTX' ? 85 : 42;
@@ -127,8 +123,8 @@ export default function FocusPage() {
           const [h2, m2] = ns.arrival.split(':').map(Number);
           const T = (h2 * 60 + m2 - h1 * 60 - m1);
           if (T <= 0) continue;
-          const fs = stations.find((x: any) => x.name === s.station);
-          const ts = stations.find((x: any) => x.name === ns.station);
+          const fs = d.corridor.stations.find((x: any) => x.name === s.station);
+          const ts = d.corridor.stations.find((x: any) => x.name === ns.station);
           if (!fs || !ts) continue;
           segs.push({ fromDist: fs.corridor_dist_m, toDist: ts.corridor_dist_m, profile: computeProfile(ts.corridor_dist_m - fs.corridor_dist_m, T, maxV, a) });
         }
@@ -141,48 +137,7 @@ export default function FocusPage() {
     return () => { mapR.current?.remove(); mapR.current = null; markR.current = null; };
   }, [trainNo, fromName, toName]);
 
-  // 2. 애니메이션 useEffect (playing만 의존)
-  useEffect(() => {
-    if (!playing || !markR.current || !mapR.current || segsR.current.length === 0 || totalSecR.current <= 0) return;
-
-    startTR.current = performance.now();
-    playingR.current = true;
-
-    function anim() {
-      if (!playingR.current || !markR.current || !mapR.current) return;
-      const simElapsed = (performance.now() - startTR.current) / 1000 * speedR.current;
-
-      if (simElapsed >= totalSimR.current) {
-        const pt = turf.along(lineR.current, totalEndR.current, { units: 'meters' });
-        markR.current.setLngLat(pt.geometry.coordinates as [number, number]);
-        setProgress(1); setCurSt(toName); setNextSt(''); setElapsed(Math.round(totalSecR.current)); setCurSpd(0);
-        setPlaying(false); playingR.current = false;
-        return;
-      }
-
-      let segElapsed = simElapsed;
-      let segIdx = 0;
-      const segs = segsR.current;
-      for (let i = 0; i < segs.length; i++) {
-        if (simElapsed <= segs[i].profile.totalTime) { segIdx = i; break; }
-        segElapsed -= segs[i].profile.totalTime;
-      }
-      if (segIdx >= segs.length) segIdx = segs.length - 1;
-
-      const seg = segs[segIdx];
-      const dist = seg.fromDist + posAtTime(seg.profile, Math.max(0, segElapsed));
-      const pt = turf.along(lineR.current, Math.min(dist, totalEndR.current), { units: 'meters' });
-      markR.current.setLngLat(pt.geometry.coordinates as [number, number]);
-      mapR.current.panTo(pt.geometry.coordinates as [number, number], { duration: 200, animate: true });
-
-      setProgress(Math.min(1, simElapsed / totalSimR.current));
-      setElapsed(Math.round(Math.min(totalSecR.current, simElapsed)));
-      setCurSpd(Math.round(speedKmh(seg.profile, Math.max(0, segElapsed))));
-      setCurSt(dataR.current.train.stops[(dataR.current.train.stops.findIndex((s: any) => s.station === fromName) + segIdx)].station);
-      setNextSt(segIdx + 1 < segs.length ? dataR.current.train.stops[(dataR.current.train.stops.findIndex((s: any) => s.station === fromName) + segIdx + 1)].station : '');
-    }
-
-  // 애니메이션 useEffect (playing만 의존, 나머지 ref)
+  // 애니메이션
   useEffect(() => {
     if (!playing || !markR.current || segsR.current.length === 0) return;
     const segs = segsR.current;
@@ -193,14 +148,12 @@ export default function FocusPage() {
     const stops = dataR.current.train.stops;
     const fromIdx = stops.findIndex((s: any) => s.station === fromName);
     const tName = toName;
-
     startTR.current = performance.now();
     playingR.current = true;
 
     function anim() {
       if (!playingR.current || !markR.current || !mapR.current) return;
       const simElapsed = (performance.now() - startTR.current) / 1000 * speedR.current;
-
       if (simElapsed >= simTotal) {
         const pt = turf.along(line, endDist, { units: 'meters' });
         markR.current.setLngLat(pt.geometry.coordinates as [number, number]);
@@ -208,7 +161,6 @@ export default function FocusPage() {
         setPlaying(false); playingR.current = false;
         return;
       }
-
       let segElapsed = simElapsed;
       let segIdx = 0;
       for (let i = 0; i < segs.length; i++) {
@@ -216,32 +168,34 @@ export default function FocusPage() {
         segElapsed -= segs[i].profile.totalTime;
       }
       if (segIdx >= segs.length) segIdx = segs.length - 1;
-
       const seg = segs[segIdx];
       const dist = seg.fromDist + posAtTime(seg.profile, Math.max(0, segElapsed));
       const pt = turf.along(line, Math.min(dist, endDist), { units: 'meters' });
       markR.current.setLngLat(pt.geometry.coordinates as [number, number]);
       mapR.current.panTo(pt.geometry.coordinates as [number, number], { duration: 200, animate: true });
-
       setProgress(Math.min(1, simElapsed / simTotal));
       setElapsed(Math.round(Math.min(secTotal, simElapsed)));
       setCurSpd(Math.round(speedKmh(seg.profile, Math.max(0, segElapsed))));
       setCurSt(stops[fromIdx + segIdx].station);
       setNextSt(segIdx + 1 < segs.length ? stops[fromIdx + segIdx + 1].station : '');
-
       animR.current = requestAnimationFrame(anim);
     }
-
     animR.current = requestAnimationFrame(anim);
     return () => { playingR.current = false; cancelAnimationFrame(animR.current); };
   }, [playing]);
 
-  if (err) return <div style={{width:'100%',height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'white'}}><div style={{color:'red'}}>{err}</div></div>;
+  if (err) {
+    return <div style={{width:'100%',height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'white'}}><div style={{color:'red'}}>{err}</div></div>;
+  }
 
   return (
     <div style={{width:'100%',height:'100vh',position:'relative',overflow:'hidden',background:'#111827'}}>
       <div ref={mc} style={{position:'absolute',inset:0}} />
-      {!ready && <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#f9fafb',zIndex:10000}}><div style={{color:'#9ca3af'}}>로딩 중...</div></div>}
+      {!ready && (
+        <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#f9fafb',zIndex:10000}}>
+          <div style={{color:'#9ca3af'}}>로딩 중...</div>
+        </div>
+      )}
       {ready && (
         <div style={{position:'absolute',inset:0,zIndex:10000,pointerEvents:'none'}}>
           <div style={{position:'absolute',bottom:0,left:0,right:0,pointerEvents:'auto'}}>
@@ -279,7 +233,7 @@ export default function FocusPage() {
                 </div>
                 <div style={{display:'flex',gap:4}}>
                   {[1,2,5,10].map(s => (
-                    <button key={s} onClick={()=>{setSpeedD(s);speedR.current=s}}
+                    <button key={s} onClick={() => { setSpeedD(s); speedR.current = s; }}
                       style={{padding:'6px 12px',fontSize:12,fontWeight:700,border:'none',borderRadius:8,cursor:'pointer',background:speedD===s?'#2563eb':'#f3f4f6',color:speedD===s?'white':'#4b5563'}}>{s}×</button>
                   ))}
                 </div>
