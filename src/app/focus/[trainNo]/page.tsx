@@ -51,9 +51,9 @@ export default function FocusPage() {
   const markR = useRef<maplibregl.Marker | null>(null);
   const playingR = useRef(false);
   const speedR = useRef(1);
-  const animR = useRef(0);
+  const animR = useRef<any>(0);
   const startTR = useRef(0);
-  const dataR = useRef<any>(null); // ref로 데이터 유지
+  const dataR = useRef<any>(null);
   const segsR = useRef<any[]>([]);
   const totalSimR = useRef(0);
   const totalEndR = useRef(0);
@@ -180,16 +180,14 @@ export default function FocusPage() {
       setCurSpd(Math.round(speedKmh(seg.profile, Math.max(0, segElapsed))));
       setCurSt(dataR.current.train.stops[(dataR.current.train.stops.findIndex((s: any) => s.station === fromName) + segIdx)].station);
       setNextSt(segIdx + 1 < segs.length ? dataR.current.train.stops[(dataR.current.train.stops.findIndex((s: any) => s.station === fromName) + segIdx + 1)].station : '');
-
-      animR.current = requestAnimationFrame(anim);
     }
 
-    animR.current = requestAnimationFrame(anim);
-    return () => { playingR.current = false; cancelAnimationFrame(animR.current); };
+    animR.current = setInterval(anim, 16);
+    return () => { playingR.current = false; clearInterval(animR.current); };
   }, [playing, toName]);
 
   const reset = () => {
-    playingR.current = false; setPlaying(false); cancelAnimationFrame(animR.current);
+    playingR.current = false; setPlaying(false); clearInterval(animR.current);
     setProgress(0); setElapsed(0); setCurSt(fromName); setNextSt(''); setCurSpd(0);
     if (markR.current && dataR.current) {
       const c = dataR.current.corridor.geometry.coordinates;
