@@ -113,25 +113,18 @@ export default function FocusPage() {
     }
     if (segs.length === 0) return;
 
-    // 가감속 프로파일 (속도 표시용)
-    function calcSpeed(seg: any, t: number): number {
+    // 가감속 속도 (위치 기반으로 현실적으로)
+    function calcSpeed(seg: any, segP: number): number {
       const D = seg.toDist - seg.fromDist;
       const T = seg.segTime;
-      if (T <= 0) return 0;
-      const a = 0.5; // m/s²
-      let v = Math.min(85, a * T / 2);
-      let aTime = v / a;
-      let aDist = v * v / (2 * a);
-      if (2 * aDist >= D) {
-        v = Math.sqrt(a * D);
-        aTime = v / a;
-      }
-      if (t <= 0) return 0;
-      if (t >= T) return 0;
-      if (t < aTime) return a * t * 3.6;
-      if (t < T - aTime) return v * 3.6;
-      const dt = t - (T - aTime);
-      return Math.max(0, (v - a * dt)) * 3.6;
+      if (T <= 0 || segP <= 0) return 0;
+      if (segP >= 1) return 0;
+      // 최고속도 = 거리/시간 * 2 (가감속 평균의 2배)
+      const avgSpeedMs = D / T; // 평균 속도 m/s
+      const maxV = Math.min(85, avgSpeedMs * 2);
+      // 정현파 가감속: segP=0.5에서 최고
+      const speed = maxV * Math.sin(Math.PI * segP);
+      return Math.round(speed * 3.6);
     }
 
     playingRef.current = true;
@@ -186,7 +179,7 @@ export default function FocusPage() {
       }
 
       // 속도 (구간 내 위치 기준)
-      setCurSpeed(Math.round(calcSpeed(seg, segT)));
+      setCurSpeed(Math.round(calcSpeed(seg, segP)));
 
       animRef.current = requestAnimationFrame(animate);
     }
