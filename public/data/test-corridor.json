@@ -1,0 +1,156 @@
+{
+  "meta": {
+    "name": "테스트 코리더",
+    "total_length_m": 8144
+  },
+  "corridor": {
+    "id": "C_TEST",
+    "name": "경부선",
+    "from": "서울",
+    "to": "영등포",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          126.9708,
+          37.5546
+        ],
+        [
+          126.9696,
+          37.54968
+        ],
+        [
+          126.9684,
+          37.544760000000004
+        ],
+        [
+          126.96719999999999,
+          37.53984
+        ],
+        [
+          126.966,
+          37.53492
+        ],
+        [
+          126.9648,
+          37.53
+        ],
+        [
+          126.95322,
+          37.52708
+        ],
+        [
+          126.94163999999999,
+          37.52416
+        ],
+        [
+          126.93006,
+          37.52124
+        ],
+        [
+          126.91847999999999,
+          37.51832
+        ],
+        [
+          126.9069,
+          37.5154
+        ]
+      ]
+    },
+    "stations": [
+      {
+        "name": "서울",
+        "lat": 37.5546,
+        "lng": 126.9708,
+        "corridor_dist_m": 0
+      },
+      {
+        "name": "용산",
+        "lat": 37.53,
+        "lng": 126.9648,
+        "corridor_dist_m": 2786
+      },
+      {
+        "name": "영등포",
+        "lat": 37.5154,
+        "lng": 126.9069,
+        "corridor_dist_m": 8144
+      }
+    ],
+    "edges": []
+  },
+  "service_paths": [
+    {
+      "id": "SP_TEST",
+      "name": "경부선",
+      "from": "서울",
+      "to": "영등포",
+      "station_sequence": [
+        "서울",
+        "용산",
+        "영등포"
+      ],
+      "total_length_m": 8144
+    }
+  ],
+  "train_runs": [
+    {
+      "train_no": "KTX001",
+      "name": "KTX 001",
+      "type": "KTX",
+      "color": "#4f46e5",
+      "service_path_id": "SP_TEST",
+      "operating_days": [],
+      "stops": [
+        {
+          "station": "서울",
+          "arrival": null,
+          "departure": "06:00"
+        },
+        {
+          "station": "용산",
+          "arrival": "06:03",
+          "departure": "06:04",
+          "_seg_km": 2.8,
+          "_T_sec": 180
+        },
+        {
+          "station": "영등포",
+          "arrival": "06:10",
+          "departure": null,
+          "_seg_km": 5.4,
+          "_T_sec": 360
+        }
+      ]
+    },
+    {
+      "train_no": "MUGUNHWA1234",
+      "name": "무궁화 1234",
+      "type": "무궁화",
+      "color": "#f97316",
+      "service_path_id": "SP_TEST",
+      "operating_days": [],
+      "stops": [
+        {
+          "station": "서울",
+          "arrival": null,
+          "departure": "07:00"
+        },
+        {
+          "station": "용산",
+          "arrival": "07:06",
+          "departure": "07:07",
+          "_seg_km": 2.8,
+          "_T_sec": 360
+        },
+        {
+          "station": "영등포",
+          "arrival": "07:20",
+          "departure": null,
+          "_seg_km": 5.4,
+          "_T_sec": 780
+        }
+      ]
+    }
+  ]
+}
