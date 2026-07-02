@@ -229,13 +229,15 @@ export default function FocusPage() {
                       markR.current.setLngLat([c[0][0], c[0][1]]);
                     }
                   }} style={{padding:'8px 12px',fontSize:14,background:'#f3f4f6',border:'none',borderRadius:12,fontWeight:500,cursor:'pointer'}}>⟲</button>
-                  <button onClick={() => {
-                    if (clickLock.current) return; clickLock.current = true;
-                    setPlaying(p => !p);
-                    setTimeout(() => { clickLock.current = false; }, 500);
-                  }} style={{padding:'12px 32px',fontSize:16,fontWeight:700,color:'white',background: playing ? '#6b7280' : '#2563eb',border:'none',borderRadius:12,boxShadow:'0 10px 15px -3px rgba(37,99,235,0.2)',cursor:'pointer'}}>
-                    {playing ? '⏸ 정지' : '▶ 재생'}
-                  </button>
+                  {playing ? (
+                    <button onClick={() => setPlaying(false)} style={{padding:'12px 32px',fontSize:16,fontWeight:700,color:'white',background:'#dc2626',border:'none',borderRadius:12,cursor:'pointer'}}>⏸ 정지</button>
+                  ) : (
+                    <button onClick={() => {
+                      if (clickLock.current) return; clickLock.current = true;
+                      setPlaying(true);
+                      setTimeout(() => { clickLock.current = false; }, 500);
+                    }} style={{padding:'12px 32px',fontSize:16,fontWeight:700,color:'white',background:'#2563eb',border:'none',borderRadius:12,boxShadow:'0 10px 15px -3px rgba(37,99,235,0.2)',cursor:'pointer'}}>▶ 재생</button>
+                  )}
                 </div>
                 <div style={{display:'flex',gap:4}}>
                   {[1,2,5,10].map(s => (
