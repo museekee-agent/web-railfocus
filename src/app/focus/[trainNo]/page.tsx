@@ -39,7 +39,7 @@ export default function FocusPage() {
   const tsR=useRef(0), teR=useRef(0), tcR=useRef(0), lR=useRef<any>(null);
   const [rd,setRd]=useState(false); const [pg,setPg]=useState(0); const [cs,setCs]=useState(fN);
   const [ns,setNs]=useState(''); const [at,setAt]=useState(''); const [el,setEl]=useState(0);
-  const [sd,setSd]=useState(1); const [sp,setSp]=useState(0); const [er,setEr]=useState('');
+  const [sd,setSd]=useState(1); const [sp,setSp]=useState(0); const [si,setSi]=useState(0); const [er,setEr]=useState('');
   const [tc,setTc]=useState('#4f46e5'); const [tt,setTt]=useState(''); const [pl,setPl]=useState(false);
 
   useEffect(() => {
@@ -111,6 +111,7 @@ export default function FocusPage() {
       mR.current.panTo(pt.geometry.coordinates as [number,number],{duration:200,animate:true});
       setPg(Math.min(1,se/simTotal)); setEl(Math.round(Math.min(secTotal,se)));
       setSp(Math.round(speedKmh(seg.p,Math.max(0,segE))));
+      setSi(segIdx);
       setCs(stops[fromIdx+segIdx].station);
       setNs(segIdx+1<segs.length?stops[fromIdx+segIdx+1].station:'');
       aR.current=requestAnimationFrame(anim);
@@ -130,11 +131,12 @@ export default function FocusPage() {
               <span style={{fontSize:14,fontWeight:600}}>{tNo}</span></div><span style={{fontSize:12,color:'#6b7280'}}>{fN} → {tN}</span></div>
           <div style={{width:'100%',height:8,background:'#e5e7eb',borderRadius:999,overflow:'hidden',marginBottom:12}}>
             <div style={{height:'100%',background:'#3b82f6',borderRadius:999,transition:'width 100ms',width:`${pg*100}%`}}/></div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:4,textAlign:'center',marginBottom:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:4,textAlign:'center',marginBottom:12}}>
             <div><div style={{fontSize:10,color:'#6b7280'}}>현재역</div><div style={{fontSize:13,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cs}</div></div>
             <div><div style={{fontSize:10,color:'#6b7280'}}>다음역</div><div style={{fontSize:13,fontWeight:700,color:'#2563eb',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ns||'도착'}</div></div>
             <div><div style={{fontSize:10,color:'#6b7280'}}>경과</div><div style={{fontSize:13,fontWeight:700}}>{el>0?Math.floor(el/60)+'분 '+el%60+'초':'0'}</div></div>
             <div><div style={{fontSize:10,color:'#6b7280'}}>속도</div><div style={{fontSize:13,fontWeight:700,color:'#059669'}}>{sp}km/h</div></div>
+            <div><div style={{fontSize:10,color:'#6b7280'}}>#seg</div><div style={{fontSize:13,fontWeight:700}}>{si}</div></div>
             <div><div style={{fontSize:10,color:'#6b7280'}}>도착</div><div style={{fontSize:13,fontWeight:700}}>{at||'-'}</div></div></div>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',gap:8}}>
