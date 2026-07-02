@@ -71,6 +71,7 @@ export default function FocusPage() {
   const [err, setErr] = useState('');
   const [trainColor, setTrainColor] = useState('#4f46e5');
   const [trainType, setTrainType] = useState('');
+  const clickLock = useRef(false);
 
   // 데이터 로드 + 지도
   useEffect(() => {
@@ -227,7 +228,11 @@ export default function FocusPage() {
                       markR.current.setLngLat([c[0][0], c[0][1]]);
                     }
                   }} style={{padding:'8px 12px',fontSize:14,background:'#f3f4f6',border:'none',borderRadius:12,fontWeight:500,cursor:'pointer'}}>⟲</button>
-                  <button onClick={() => setPlaying(p => !p)} style={{padding:'12px 32px',fontSize:16,fontWeight:700,color:'white',background:'#2563eb',border:'none',borderRadius:12,boxShadow:'0 10px 15px -3px rgba(37,99,235,0.2)',cursor:'pointer'}}>
+                  <button onClick={() => {
+                    if (clickLock.current) return; clickLock.current = true;
+                    setPlaying(p => !p);
+                    setTimeout(() => { clickLock.current = false; }, 500);
+                  }} style={{padding:'12px 32px',fontSize:16,fontWeight:700,color:'white',background: playing ? '#6b7280' : '#2563eb',border:'none',borderRadius:12,boxShadow:'0 10px 15px -3px rgba(37,99,235,0.2)',cursor:'pointer'}}>
                     {playing ? '⏸ 정지' : '▶ 재생'}
                   </button>
                 </div>
