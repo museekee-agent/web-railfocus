@@ -86,7 +86,7 @@ export default function FocusPage() {
       if (dep?.departure && arr?.arrival) {
         const [h1, m1] = dep.departure.split(':').map(Number);
         const [h2, m2] = arr.arrival.split(':').map(Number);
-        totalSecR.current = (h2 * 60 + m2 - h1 * 60 - m1);
+        totalSecR.current = (h2 * 60 + m2 - h1 * 60 - m1) * 60;
         setArrT(arr.arrival);
       }
       if (!mc.current) return;
@@ -122,7 +122,7 @@ export default function FocusPage() {
           if (!s.departure || !ns.arrival) continue;
           const [h1, m1] = s.departure.split(':').map(Number);
           const [h2, m2] = ns.arrival.split(':').map(Number);
-          const T = (h2 * 60 + m2 - h1 * 60 - m1);
+          const T = (h2 * 60 + m2 - h1 * 60 - m1) * 60;
           if (T <= 0) continue;
           const fs = d.corridor.stations.find((x: any) => x.name === s.station);
           const ts = d.corridor.stations.find((x: any) => x.name === ns.station);
