@@ -168,7 +168,8 @@ export default function FocusPage() {
         if (simElapsed <= segs[i].profile.totalTime) { segIdx = i; break; }
         segElapsed -= segs[i].profile.totalTime;
       }
-      if (segIdx >= segs.length) segIdx = segs.length - 1;
+      if (segIdx >= segs.length) { segIdx = segs.length - 1; segElapsed = segs[segIdx].profile.totalTime; }
+      if (segIdx < 0) { segIdx = 0; segElapsed = 0; }
       const seg = segs[segIdx];
       const dist = seg.fromDist + posAtTime(seg.profile, Math.max(0, segElapsed));
       const pt = turf.along(line, Math.min(dist, endDist), { units: 'meters' });
