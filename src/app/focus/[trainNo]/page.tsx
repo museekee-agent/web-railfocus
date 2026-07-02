@@ -36,7 +36,7 @@ export default function FocusPage() {
   const tNo = p[p.length-1]||'KTX001', fN = q.get('from')||'서울', tN = q.get('to')||'부산';
   const mc=useRef<HTMLDivElement>(null), mR=useRef<maplibregl.Map|null>(null), mkR=useRef<maplibregl.Marker|null>(null);
   const pR=useRef(false), sR=useRef(1), aR=useRef(0), stR=useRef(0), dR=useRef<any>(null), sgR=useRef<any[]>([]);
-  const tsR=useRef(0), teR=useRef(0), tcR=useRef(0), lR=useRef<any>(null);
+  const tsR=useRef(0), teR=useRef(0), tcR=useRef(0), lR=useRef<any>(null), psR=useRef(0);
   const [rd,setRd]=useState(false); const [pg,setPg]=useState(0); const [cs,setCs]=useState(fN);
   const [ns,setNs]=useState(''); const [at,setAt]=useState(''); const [el,setEl]=useState(0);
   const [sd,setSd]=useState(1); const [sp,setSp]=useState(0); const [si,setSi]=useState(0); const [er,setEr]=useState('');
@@ -105,6 +105,7 @@ export default function FocusPage() {
       let segE=se, segIdx=0;
       for(let i=0;i<segs.length;i++){if(se<=segs[i].p.tT){segIdx=i;break;} segE-=segs[i].p.tT;}
       if(segIdx>=segs.length){segIdx=segs.length-1;segE=segs[segIdx].p.tT;}
+      if(segIdx<psR.current)segIdx=psR.current; psR.current=segIdx;
       const seg=segs[segIdx], dist=seg.fD+posAtTime(seg.p,Math.max(0,segE));
       const pt=turf.along(line,Math.min(dist,endDist),{units:'meters'});
       mkR.current.setLngLat(pt.geometry.coordinates as [number,number]);
